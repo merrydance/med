@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧠 神经外科 AI 科研助手</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <!-- 设置弹窗 -->
+  <div id="settingsOverlay" class="overlay hidden">
+    <div class="modal">
+      <h2>⚙️ 设置</h2>
+      <label>API 地址 (Base URL)
+        <input type="text" id="baseUrl" placeholder="https://yunwu.ai/v1" />
+      </label>
+      <label>API Key
+        <div class="input-group">
+          <input type="password" id="apiKey" placeholder="sk-xxxxxxxx" />
+          <button id="toggleKeyBtn" class="btn-icon" title="显示/隐藏">👁</button>
+        </div>
+      </label>
+      <label>Tavily 搜索 Key (可选，启用联网搜索)
+        <input type="password" id="tavilyKey" placeholder="tvly-xxxxxxxx (留空则仅用PubMed)" />
+      </label>
+      <label>模型
+        <select id="modelSelect">
+          <option value="gpt-5.5">GPT-5.5</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o-mini</option>
+          <option value="gpt-4.1">GPT-4.1</option>
+          <option value="gpt-4.1-mini">GPT-4.1-mini</option>
+          <option value="o3">o3</option>
+          <option value="o4-mini">o4-mini</option>
+          <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+          <option value="claude-opus-4-20250514">Claude Opus 4</option>
+        </select>
+      </label>
+      <label>自定义模型名称 (可选)
+        <input type="text" id="customModel" placeholder="留空则使用上方选择" />
+      </label>
+      <label>推理强度 (GPT-5.5 / o系列)
+        <select id="reasoningEffort">
+          <option value="">默认 (不指定)</option>
+          <option value="low">Low — 快速</option>
+          <option value="medium">Medium — 均衡</option>
+          <option value="high">High — 深度</option>
+          <option value="xhigh">XHigh — 最强</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button id="saveSettings" class="btn-primary">保存</button>
+        <button id="cancelSettings" class="btn-secondary">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主界面 -->
+  <div class="app">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>🧠 科研助手</h1>
+        <button id="newChatBtn" class="btn-new" title="新对话">＋ 新对话</button>
+      </div>
+      <div id="chatList" class="chat-list"></div>
+      <div class="sidebar-footer">
+        <button id="settingsBtn" class="btn-icon-text">⚙️ 设置</button>
+        <button id="clearAllBtn" class="btn-icon-text btn-danger">🗑 清除所有</button>
+      </div>
+    </aside>
+
+    <!-- 主聊天区 -->
+    <main class="main">
+      <!-- 技能栏 -->
+      <div class="toolbar">
+        <div class="skills">
+          <label class="skill-toggle" title="启用后可分析上传的文档">
+            <input type="checkbox" id="skillDoc" checked />
+            <span>📄 文档分析</span>
+          </label>
+          <label class="skill-toggle" title="启用后AI会联网搜索最新信息">
+            <input type="checkbox" id="skillSearch" />
+            <span>🌐 联网搜索</span>
+          </label>
+          <label class="skill-toggle" title="启用后AI会以神经外科专家角色回答">
+            <input type="checkbox" id="skillNeuro" checked />
+            <span>🧠 神经外科模式</span>
+          </label>
+        </div>
+        <div class="model-badge" id="modelBadge">GPT-5.5-Pro</div>
+      </div>
+
+      <!-- 消息区 -->
+      <div id="messages" class="messages">
+        <div class="welcome">
+          <div class="welcome-icon">🧠</div>
+          <h2>神经外科 AI 科研助手</h2>
+          <p>您好，我是您的科研助手。您可以：</p>
+          <div class="welcome-cards">
+            <div class="card" data-prompt="总结近3年经鼻蝶入路切除垂体腺瘤的手术技巧改进">
+              📚 文献综述
+              <small>总结特定术式的最新进展</small>
+            </div>
+            <div class="card" data-prompt="请帮我分析这篇论文的方法学和统计分析是否合理">
+              📄 论文分析
+              <small>上传PDF进行深度分析</small>
+            </div>
+            <div class="card" data-prompt="IDH突变型胶质瘤的最新WHO分类标准及预后差异">
+              🔬 知识查询
+              <small>查询专业医学知识</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区 -->
+      <div class="input-area">
+        <div id="filePreview" class="file-preview hidden"></div>
+        <div class="input-row">
+          <button id="uploadBtn" class="btn-icon" title="上传文档 (PDF/TXT/MD)">📎</button>
+          <!-- Electron 使用原生文件对话框 -->
+          <textarea id="userInput" placeholder="输入您的问题... (Shift+Enter 换行, Enter 发送)" rows="1"></textarea>
+          <button id="sendBtn" class="btn-send" title="发送">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="search.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
