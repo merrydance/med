@@ -304,17 +304,38 @@ async function sendMessage() {
   // 构建系统提示
   let systemPrompt = buildSystemPrompt();
 
+  let searchContext = '';
   // 联网搜索: 若开启则先搜索再注入上下文
   const skillSearch = document.getElementById('skillSearch').checked;
   if (skillSearch && text) {
-    updateStreamingMessage('🔍 正在搜索 PubMed 和网络...');
-    const [pubmedResults, tavilyResults] = await Promise.all([
-      searchPubMed(text),
-      settings.tavilyKey ? searchTavily(text, settings.tavilyKey, NEURO_SEARCH_DOMAINS) : null,
-    ]);
-    const searchContext = formatSearchContext(pubmedResults, tavilyResults);
-    if (searchContext) {
-      systemPrompt += `\n\n以下是针对用户问题的实时检索结果，请基于这些最新文献和信息来回答，并在回答中引用相关文献的PMID或标题：${searchContext}`;
+    const hasTavily = !!settings.tavilyKey;
+    const statusMsg = hasTavily
+      ? '🔍 正在搜索 PubMed + 网络...'
+      : '🔍 正在搜索 PubMed...（未配置 Tavily Key，无法搜索网页）';
+    updateStreamingMessage(statusMsg);
+
+    let pubmedResults = null;
+    let tavilyResults = null;
+    try {
+      [pubmedResults, tavilyResults] = await Promise.all([
+        searchPubMed(text),
+        hasTavily ? searchTavily(text, settings.tavilyKey) : null,
+      ]);
+    } catch (e) {
+      console.error('搜索出错:', e);
+    }
+
+    // 显示搜索状态
+    const pubmedCount = pubmedResults?.length || 0;
+    const tavilyCount = tavilyResults?.results?.length || 0;
+    let searchStatus = `🔍 搜索完成: PubMed ${pubmedCount} 篇`;
+    if (hasTavily) searchStatus += `, 网页 ${tavilyCount} 条`;
+    if (pubmedCount === 0 && tavilyCount === 0) searchStatus += ' (未找到结果)';
+    updateStreamingMessage(searchStatus + '\n\n⏳ 正在分析...');
+
+    searchContext = formatSearchContext(pubmedResults, tavilyResults);
+    if (!searchContext && !hasTavily) {
+      searchContext = '\n\n[注意：未配置 Tavily Key 且 PubMed 未找到结果。请基于自身知识回答，并提醒用户配置 Tavily Key 以搜索网页。]';
     }
   }
 
@@ -322,7 +343,16 @@ async function sendMessage() {
   const recentMessages = chat.messages.slice(-20);
   const apiMessages = [
     { role: 'system', content: systemPrompt },
-    ...recentMessages.map(m => ({ role: m.role, content: m.content })),
+    ...recentMessages.map((m, index) => {
+      // 在最后一条用户消息中追加搜索上下文，防止部分深度推理模型忽略 system prompt
+      if (index === recentMessages.length - 1 && m.role === 'user' && searchContext) {
+        return { 
+          role: m.role, 
+          content: m.content + `\n\n=== 实时检索结果 ===\n请务必优先基于以下最新搜索结果来回答用户问题，并引用相关信息源：\n${searchContext}` 
+        };
+      }
+      return { role: m.role, content: m.content };
+    }),
   ];
 
   // 流式请求 (带自动重试)
