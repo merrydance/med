@@ -13,7 +13,11 @@ export interface AppSettings {
 export interface FileReadResult {
   name: string;
   text: string;
+  markdown?: string;
   pages: number;
+  provider?: 'docling' | 'pdf-parse' | 'plain-text';
+  fallbackFrom?: string | null;
+  warnings?: string[];
 }
 
 export interface DocumentContextChunk {

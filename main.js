@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./src-main/db.js');
 const settingsStore = require('./src-main/settings.js');
+const { parseDocument } = require('./src-main/documentParser.js');
 const {
   normalizeChatBaseUrl,
   createChatRequestBody,
@@ -131,15 +132,7 @@ ipcMain.handle('db:deleteChat', (_, chatId) => {
 // 读取文件
 ipcMain.handle('file:read', async (_, filePath) => {
   try {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.pdf') {
-      const pdfParse = require('pdf-parse');
-      const buffer = fs.readFileSync(filePath);
-      const data = await pdfParse(buffer);
-      return { name: path.basename(filePath), text: data.text || '', pages: data.numpages || 1 };
-    }
-    const text = fs.readFileSync(filePath, 'utf-8');
-    return { name: path.basename(filePath), text, pages: 1 };
+    return await parseDocument(filePath);
   } catch (err) {
     throw new Error(`文件读取失败: ${err.message}`);
   }

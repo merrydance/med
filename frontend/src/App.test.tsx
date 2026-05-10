@@ -131,4 +131,40 @@ describe('App settings controls', () => {
       expect(api.chat).toHaveBeenCalled()
     })
   })
+
+  it('shows clear document parsing status while uploading a file', async () => {
+    let resolveFile: (value: {
+      name: string
+      text: string
+      pages: number
+      provider: 'docling'
+      warnings: string[]
+    }) => void
+    const api = mockElectronApi({
+      openFileDialog: vi.fn().mockResolvedValue('/tmp/paper.pdf'),
+      readFile: vi.fn().mockImplementation(() => new Promise((resolve) => {
+        resolveFile = resolve
+      })),
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '上传文档' }))
+
+    expect(await screen.findByText('正在解析文档')).toBeTruthy()
+    expect(screen.getByText(/PDF 会优先尝试本地 Docling 高级解析/)).toBeTruthy()
+
+    resolveFile!({
+      name: 'paper.pdf',
+      text: '胶质母细胞瘤研究',
+      pages: 12,
+      provider: 'docling',
+      warnings: [],
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('高级解析完成，已保留更完整的段落和表格文本。')).toBeTruthy()
+    })
+    expect(screen.getByText('paper.pdf')).toBeTruthy()
+    expect(api.readFile).toHaveBeenCalledWith('/tmp/paper.pdf')
+  })
 })

@@ -38,6 +38,8 @@ export function ChatArea() {
   const [enableSearch, setEnableSearch] = useState(false)
   const [enableNeuro, setEnableNeuro] = useState(true)
   const [isPreparing, setIsPreparing] = useState(false)
+  const [isParsingFile, setIsParsingFile] = useState(false)
+  const [fileStatus, setFileStatus] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
   const isUserScrollingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -159,6 +161,7 @@ export function ChatArea() {
     const query = text || '请分析这篇文档。'
 
     if (window.electronAPI?.selectDocumentContext) {
+      setFileStatus('正在从文档中检索最相关的片段...')
       const result = await window.electronAPI.selectDocumentContext({
         name: pendingFile.name,
         text: pendingFile.text,
@@ -166,6 +169,7 @@ export function ChatArea() {
       })
 
       if (result.mode === 'rag') {
+        setFileStatus(`已选取 ${result.chunks.length} 个相关片段，正在发送给模型。`)
         return [
           `[上传文档: ${pendingFile.name}]`,
           `本地 RAG 已从 ${result.totalChunks} 个片段中选取 ${result.chunks.length} 个相关片段（原文 ${result.originalChars.toLocaleString()} 字符，入模 ${result.selectedChars.toLocaleString()} 字符）。`,
@@ -179,6 +183,7 @@ export function ChatArea() {
         ].join('\n')
       }
 
+      setFileStatus('文档较短，已准备全文发送给模型。')
       return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${result.context}\n---\n\n${query}`
     }
 
@@ -203,29 +208,44 @@ export function ChatArea() {
   }
 
   const handleUpload = async () => {
-    if (!window.electronAPI || isStreaming) return
+    if (!window.electronAPI || isStreaming || isParsingFile) return
 
     try {
       const filePath = await window.electronAPI.openFileDialog()
       if (!filePath) return
 
+      setIsParsingFile(true)
+      setFileStatus('正在读取文档，请稍候...')
       const file = await window.electronAPI.readFile(filePath)
       setPendingFile(file)
       setEnableDoc(true)
+      const warning = file.warnings?.[0]
+      if (warning) {
+        setFileStatus(warning)
+      } else if (file.provider === 'docling') {
+        setFileStatus('高级解析完成，已保留更完整的段落和表格文本。')
+      } else if (file.provider === 'pdf-parse') {
+        setFileStatus('兼容解析完成，可以继续提问。')
+      } else {
+        setFileStatus('文档已读取，可以继续提问。')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '文件读取失败'
+      setFileStatus('')
       addMessage({
         id: Math.random().toString(36).substring(2, 15),
         role: 'system',
         content: `错误: ${message}`,
         createdAt: Date.now()
       })
+    } finally {
+      setIsParsingFile(false)
     }
   }
 
   const handleSend = async () => {
     const trimmedInput = inputText.trim()
-    if ((!trimmedInput && !pendingFile) || isStreaming || isPreparing) return
+    if ((!trimmedInput && !pendingFile) || isStreaming || isPreparing || isParsingFile) return
 
     if (!currentChatId) {
       await createNewChat({
@@ -246,6 +266,7 @@ export function ChatArea() {
     addMessage(userMsg)
     setInputText('')
     setPendingFile(null)
+    setFileStatus('')
     isUserScrollingRef.current = false
 
     const aiMsg: ChatMessage = {
@@ -317,14 +338,31 @@ export function ChatArea() {
     <>
       {pendingFile && (
         <div className="file-preview-bar">
-          <span className="file-preview-name">{pendingFile.name}</span>
-          <span className="file-preview-meta">
-            {pendingFile.pages > 1 ? `${pendingFile.pages} 页 · ` : ''}
-            {pendingFile.text.length.toLocaleString()} 字符
-          </span>
-          <button className="file-preview-remove" onClick={() => setPendingFile(null)}>
+          <div className="file-preview-main">
+            <span className="file-preview-name">{pendingFile.name}</span>
+            <span className="file-preview-meta">
+              {pendingFile.provider === 'docling' ? '高级解析 · ' : ''}
+              {pendingFile.provider === 'pdf-parse' ? '兼容解析 · ' : ''}
+              {pendingFile.pages > 1 ? `${pendingFile.pages} 页 · ` : ''}
+              {pendingFile.text.length.toLocaleString()} 字符
+            </span>
+            {fileStatus && <span className="file-preview-status">{fileStatus}</span>}
+          </div>
+          <button className="file-preview-remove" onClick={() => { setPendingFile(null); setFileStatus('') }}>
             移除
           </button>
+        </div>
+      )}
+
+      {isParsingFile && (
+        <div className="file-preview-bar parsing">
+          <div className="file-preview-spinner" aria-hidden="true" />
+          <div className="file-preview-main">
+            <span className="file-preview-name">正在解析文档</span>
+            <span className="file-preview-status">
+              PDF 会优先尝试本地 Docling 高级解析；如果本机未安装或耗时过长，会自动切换到兼容解析。
+            </span>
+          </div>
         </div>
       )}
 
@@ -333,7 +371,7 @@ export function ChatArea() {
           <button
             className="chat-upload-btn"
             onClick={handleUpload}
-            disabled={isStreaming || isPreparing}
+            disabled={isStreaming || isPreparing || isParsingFile}
             title="上传文档"
             aria-label="上传文档"
           >
@@ -347,14 +385,15 @@ export function ChatArea() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="输入您的科研问题..."
+            placeholder={isParsingFile ? '正在解析文档，请稍候...' : '输入您的科研问题...'}
+            disabled={isParsingFile}
           />
           <button
             className="chat-send-btn"
             onClick={handleSend}
-            disabled={isStreaming || isPreparing || (!inputText.trim() && !pendingFile)}
+            disabled={isStreaming || isPreparing || isParsingFile || (!inputText.trim() && !pendingFile)}
           >
-            {isStreaming || isPreparing ? '生成中...' : '发送'}
+            {isParsingFile ? '解析中...' : isStreaming || isPreparing ? '生成中...' : '发送'}
           </button>
         </div>
 

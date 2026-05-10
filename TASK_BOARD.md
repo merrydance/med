@@ -177,14 +177,16 @@
 > **试用版策略**：阶段五暂不进入当前医生内部试用版，作为下一版增强项推进。当前试用版先覆盖基础聊天、文档纯文本分析、可信来源搜索、SQLite 历史会话和连接诊断。
 
 ### [Task-5.1.1] 废弃 pdf-parse 与高级解析引擎集成
-- **Assignee**: (待认领)
-- **涉及范围**: `main.js` (解析模块)
+- **Assignee**: Codex
+- **涉及范围**: `main.js`, `src-main/documentParser.js`, `frontend/src/components/ChatArea.tsx`
 - **Action**:
-  1. 卸载 `pdf-parse`。
-  2. 接入新的解析引擎（如调用外部高效 API LlamaParse，或本地封装基于 Python 的 `pdfplumber` 可执行文件）。
-  3. 保证解析返回包含表格结构的 Markdown。
+  1. [ ] 卸载 `pdf-parse`。（当前保留为兼容回退，避免医生电脑未安装 Docling 时上传功能不可用）
+  2. [x] 接入新的解析引擎：优先调用本机 `docling` CLI 生成 Markdown，失败/超时自动回退到 `pdf-parse`。
+  3. [x] 解析返回包含 Markdown、纯文本、解析器来源、回退来源和用户可读警告。
+  4. [x] 前端上传时显示明确的解析中、自动回退、解析完成和发送前检索状态，避免用户误以为死机或无效。
 - **DoD**:
-  - [ ] 解析双栏医学论文不再发生文本错乱。
+  - [x] 已补充自动化测试覆盖 Docling Markdown 表格文本保留、Docling 不可用时回退、双解析失败报错和前端解析等待态。
+  - [ ] 仍需安装 Docling 后用真实双栏医学论文手测：确认文本顺序和表格结构优于 `pdf-parse`。
 
 ### [Task-5.2.1] 本地轻量化 RAG (文本切块与检索)
 - **Assignee**: Codex
