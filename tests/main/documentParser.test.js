@@ -99,7 +99,7 @@ test('formats short Docling unavailable reasons for the UI', () => {
 });
 
 test('runs Docling with standard local parsing and OCR disabled by default', () => {
-  const args = buildDoclingArgs('/tmp/paper.pdf', '/tmp/out', 120000);
+  const args = buildDoclingArgs('/tmp/paper.pdf', '/tmp/out', 30000);
 
   assert.deepEqual(args, [
     '--pipeline', 'standard',
@@ -108,7 +108,7 @@ test('runs Docling with standard local parsing and OCR disabled by default', () 
     '--table-mode', 'accurate',
     '--to', 'md',
     '--output', '/tmp/out',
-    '--document-timeout', '120',
+    '--document-timeout', '30',
     '/tmp/paper.pdf'
   ]);
 });

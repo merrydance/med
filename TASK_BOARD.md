@@ -186,7 +186,8 @@
   4. [x] 前端上传时显示明确的解析中、自动回退、解析完成和发送前检索状态，避免用户误以为死机或无效。
 - **DoD**:
   - [x] 已补充自动化测试覆盖 Docling Markdown 表格文本保留、Docling 不可用时回退、双解析失败报错和前端解析等待态。
-  - [ ] 仍需安装 Docling 后用真实双栏医学论文手测：确认文本顺序和表格结构优于 `pdf-parse`。
+  - [x] 已安装 Docling 并使用 3 个开放获取 GBM 医学 PDF 进行真实评测，结果记录在 `docs/evaluation/2026-05-10-docling-pdf-evaluation.md`。
+  - [ ] 真实评测中 Docling 均 120 秒超时并回退，尚未验证表格 Markdown 质量；默认超时已收紧到 30 秒，后续需在更强机器/暖缓存下复测。
 
 ### [Task-5.2.1] 本地轻量化 RAG (文本切块与检索)
 - **Assignee**: Codex

@@ -5,7 +5,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_DOCLING_TIMEOUT_MS = 120000;
+const DEFAULT_DOCLING_TIMEOUT_MS = Number(process.env.YUNWU_DOCLING_TIMEOUT_MS || 30000);
 
 function stripMarkdownForSearch(markdown) {
   return String(markdown || '')
