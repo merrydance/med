@@ -12,6 +12,7 @@ const {
   testChatConnection
 } = require('./src-main/api.js');
 const { buildDocumentContext } = require('./src-main/rag.js');
+const { createSearchPlanner } = require('./src-main/searchPlanner.js');
 
 const APP_TITLE = '神外医生AI助手';
 const fileAccessGuard = createFileAccessGuard();
@@ -275,9 +276,11 @@ const searchModule = require('./search.js');
 ipcMain.handle('api:searchTavily', async (event, query) => {
   const settings = getSettingsSync();
   try {
+    const planner = createSearchPlanner({ settings });
+    const searchPlan = await searchModule.planSearchQueries({ query, planner });
     const [pubmedResults, tavilyResults] = await Promise.all([
-      searchModule.searchPubMed(query),
-      searchModule.searchTavily(query, settings.tavilyKey, searchModule.NEURO_SEARCH_DOMAINS)
+      searchModule.searchPubMed(query, 8, { searchPlan }),
+      searchModule.searchTavily(searchPlan.tavilyQuery || query, settings.tavilyKey, searchModule.NEURO_SEARCH_DOMAINS)
     ]);
 
     return searchModule.formatSearchContext(pubmedResults, tavilyResults);

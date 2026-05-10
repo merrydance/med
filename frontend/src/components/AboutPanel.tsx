@@ -65,7 +65,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
         <ul>
           <li>可用于神经外科科研选题、文献阅读、研究设计、论文写作和临床问题梳理。</li>
           <li>上传 PDF/TXT/MD 文档后，可以直接围绕文档提问；长文档会自动选取最相关的内容作为回答依据。</li>
-          <li>开启联网搜索后，系统会优先检索 PubMed；中文问题会提示并生成辅助检索式，尽量利用 PubMed 的 MeSH/ATM 检索机制。</li>
+          <li>开启联网搜索后，系统会优先检索 PubMed；中文问题会交给模型规划英文 PubMed 检索式，并尽量利用 MeSH/ATM 检索机制。</li>
           <li>系统会尽量在回答中提供 PMID、PubMed 链接和 DOI；如提示证据不足，请优先回到原文继续核验。</li>
           <li>涉及诊疗、用药、手术策略或指南推荐时，请回到原始文献、指南原文和本院规范进行确认。</li>
         </ul>

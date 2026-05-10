@@ -18,6 +18,9 @@ const MODEL_OPTIONS = [
   { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
 ]
 
+const SEARCH_CONTEXT_MESSAGE_LIMIT = 4
+const SEARCH_CONTEXT_MAX_CHARS = 360
+
 type FileQueueItem = {
   id: string
   path: string
@@ -234,16 +237,41 @@ export function ChatArea() {
     return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${truncated}\n---\n\n${query}`
   }
 
+  const buildContextualSearchQuery = (query: string) => {
+    const trimmedQuery = query.trim()
+    const recentConversationMessages = currentMessages
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .slice(-SEARCH_CONTEXT_MESSAGE_LIMIT)
+    const topicSeed = recentConversationMessages.find((message) => message.role === 'user')?.content
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120)
+    const recentMessages = recentConversationMessages
+      .map((message) => `${message.role === 'user' ? '用户' : '助手'}: ${message.content.replace(/\s+/g, ' ').trim()}`)
+      .filter((content) => content.length > 3)
+      .join('\n')
+      .slice(0, SEARCH_CONTEXT_MAX_CHARS)
+
+    if (!recentMessages) return trimmedQuery
+    return [
+      `当前追问: ${trimmedQuery}`,
+      `上文主题: ${topicSeed || recentMessages}`,
+      `最近对话: ${recentMessages}`,
+      '请围绕上文主题补全省略对象，生成医学文献检索。'
+    ].join('\n')
+  }
+
   const getSearchContext = async (query: string, chatId: string) => {
     if (!enableSearch || !query.trim() || !window.electronAPI) return ''
 
     const sourceLabel = tavilyKey ? 'PubMed + 网络' : 'PubMed'
     if (/[\u3400-\u9fff]/.test(query)) {
-      appendAssistantStream('PubMed 对英文检索词和 MeSH/ATM 更友好；已将中文问题交给检索模块生成辅助检索式，结果仍需结合原文核验。\n\n', chatId)
+      appendAssistantStream('PubMed 对英文检索词和 MeSH/ATM 更友好；已将中文问题交给模型规划 PubMed 检索式，结果仍需结合原文核验。\n\n', chatId)
     }
     appendAssistantStream(`正在搜索 ${sourceLabel}...\n\n`, chatId)
 
-    const context = await window.electronAPI.searchTavily(query)
+    const searchQuery = buildContextualSearchQuery(query)
+    const context = await window.electronAPI.searchTavily(searchQuery)
     if (!context) {
       appendAssistantStream('未检索到可用结果，继续基于已有上下文回答。\n\n', chatId)
       return ''

@@ -117,6 +117,8 @@ describe('App settings controls', () => {
     expect(screen.getByText(/上传 PDF/)).toBeTruthy()
     expect(screen.queryByText(/本地片段检索/)).toBeNull()
     expect(screen.getByText(/长文档会自动选取最相关的内容/)).toBeTruthy()
+    expect(screen.getByText(/模型规划英文 PubMed 检索式/)).toBeTruthy()
+    expect(screen.queryByText(/辅助检索式/)).toBeNull()
     expect(screen.queryByText(/引用文献时应尽量/)).toBeNull()
     expect(screen.getByText(/系统会尽量在回答中提供 PMID、PubMed 链接和 DOI/)).toBeTruthy()
     expect(screen.getByText(/可能存在幻觉/)).toBeTruthy()
@@ -399,7 +401,7 @@ describe('App settings controls', () => {
 
   it('shows Chinese PubMed query guidance when searching from a Chinese question', async () => {
     const api = mockElectronApi({
-      searchTavily: vi.fn().mockResolvedValue('\n\n【PubMed 检索说明】\n检测到中文输入，已使用内置检索提示词生成 PubMed 检索式。'),
+      searchTavily: vi.fn().mockResolvedValue('\n\n【PubMed 检索说明】\nPubMed 检索式由模型基于当前问题和上下文生成。'),
     })
     useChatStore.setState({
       currentChatId: 'chat-1',
@@ -414,7 +416,38 @@ describe('App settings controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/PubMed 对英文检索词和 MeSH\/ATM 更友好/)).toBeTruthy()
     })
+    expect(screen.getByText(/模型规划 PubMed 检索式/)).toBeTruthy()
     expect(api.searchTavily).toHaveBeenCalledWith('胶质母细胞瘤复发治疗进展')
+  })
+
+  it('includes recent topic context when searching from a follow-up question', async () => {
+    const api = mockElectronApi({
+      searchTavily: vi.fn().mockResolvedValue('PubMed result'),
+    })
+    useChatStore.setState({
+      currentChatId: 'chat-1',
+      currentMessages: [{
+        id: 'm1',
+        role: 'user',
+        content: '岛叶胶质瘤的切除方案',
+        createdAt: 1,
+      }, {
+        id: 'm2',
+        role: 'assistant',
+        content: '岛叶胶质瘤手术需要最大安全切除。',
+        createdAt: 2,
+      }],
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('联网搜索'))
+    fireEvent.change(screen.getByPlaceholderText('输入您的科研问题...'), { target: { value: '这些手术方案中，中国的论文有哪些？' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(api.searchTavily).toHaveBeenCalledWith(expect.stringContaining('当前追问: 这些手术方案中，中国的论文有哪些？'))
+    })
+    expect(api.searchTavily).toHaveBeenCalledWith(expect.stringContaining('上文主题: 岛叶胶质瘤的切除方案'))
   })
 
   it('shows clear document parsing status while uploading a file', async () => {
