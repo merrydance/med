@@ -5,6 +5,7 @@ import hljs from 'highlight.js'
 
 const md: MarkdownIt = new MarkdownIt({
   html: false,
+  breaks: true,
   linkify: true,
   typographer: true,
   highlight: (str: string, lang: string): string => {

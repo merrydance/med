@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { useChatStore } from './store/chatStore'
+import { DEFAULT_REASONING_EFFORT, useChatStore } from './store/chatStore'
 import { useSettingStore } from './store/settingStore'
 import type { AppSettings, ElectronAPI } from './types/env'
 
@@ -63,7 +63,7 @@ describe('App settings controls', () => {
       currentChatId: null,
       currentMessages: [],
       draftModel: 'gpt-5.5',
-      draftReasoningEffort: '',
+      draftReasoningEffort: DEFAULT_REASONING_EFFORT,
       isLoaded: false,
       isStreaming: false,
     })
@@ -197,6 +197,88 @@ describe('App settings controls', () => {
     })
   })
 
+  it('uses high reasoning effort by default when starting a new chat', async () => {
+    const chat = vi.fn()
+    const api = mockElectronApi({ chat })
+    render(<App />)
+
+    expect((await screen.findByLabelText('推理强度') as HTMLSelectElement).value).toBe('high')
+
+    fireEvent.change(screen.getByPlaceholderText('输入您的科研问题...'), { target: { value: '听神经瘤术后面瘫风险因素' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(api.dbCreateChat).toHaveBeenCalledWith(expect.objectContaining({
+        reasoningEffort: 'high',
+      }))
+      expect(chat).toHaveBeenCalledWith(expect.objectContaining({
+        settings: expect.objectContaining({ reasoningEffort: 'high' }),
+      }))
+    })
+  })
+
+  it('shows tool toggles on the welcome composer and can search before the first message', async () => {
+    const api = mockElectronApi({
+      searchTavily: vi.fn().mockResolvedValue('PubMed result'),
+    })
+    render(<App />)
+
+    expect(await screen.findByText('文档分析')).toBeTruthy()
+    expect(screen.getByText('神经外科模式')).toBeTruthy()
+    fireEvent.click(screen.getByText('联网搜索'))
+
+    fireEvent.change(screen.getByPlaceholderText('输入您的科研问题...'), { target: { value: 'meningioma immunotherapy' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(api.searchTavily).toHaveBeenCalledWith('meningioma immunotherapy')
+      expect(api.chat).toHaveBeenCalled()
+    })
+  })
+
+  it('places neurosurgery mode before web search in the chat toolbar', async () => {
+    useChatStore.setState({
+      currentChatId: 'chat-1',
+      currentMessages: [],
+    })
+    render(<App />)
+
+    const neuroToggle = await screen.findByText('神经外科模式')
+    const searchToggle = screen.getByText('联网搜索')
+
+    expect(neuroToggle.compareDocumentPosition(searchToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('does not create an empty chat when clicking the new chat button', async () => {
+    const api = mockElectronApi({
+      dbGetChats: vi.fn().mockResolvedValue([{
+        id: 'existing-chat',
+        title: '已有对话',
+        model: 'gpt-5.5',
+        reasoningEffort: '',
+        createdAt: 1,
+        updatedAt: 1,
+      }]),
+    })
+    render(<App />)
+
+    await screen.findByText('已有对话')
+    fireEvent.click(screen.getByRole('button', { name: '+ 新建对话' }))
+
+    expect(api.dbCreateChat).not.toHaveBeenCalled()
+    expect(screen.getByText('从哪个问题开始？')).toBeTruthy()
+    expect(screen.getByText('已有对话')).toBeTruthy()
+  })
+
+  it('uses a multiline composer input that can wrap long questions', async () => {
+    render(<App />)
+
+    const composer = await screen.findByPlaceholderText('输入您的科研问题...')
+
+    expect(composer.tagName).toBe('TEXTAREA')
+    expect(composer.getAttribute('rows')).toBe('1')
+  })
+
   it('keeps the medical guardrail prompt as a system message', async () => {
     const chat = vi.fn()
     mockElectronApi({ chat })
@@ -217,6 +299,102 @@ describe('App settings controls', () => {
     expect(messages[0].content).toContain('证据依据')
     expect(messages[0].content).toContain('可追踪引用')
     expect(messages[0].content).toContain('不得把模型背景知识包装成检索证据')
+    expect(messages[0].content).toContain('必须使用 Markdown 分层排版')
+    expect(messages[0].content).toContain('## 先说结论')
+    expect(messages[0].content).toContain('## 分析依据')
+    expect(messages[0].content).toContain('## 下一步建议')
+    expect(messages[0].content).toContain('## 可追踪引用')
+    expect(messages[0].content).toContain('不要把多个诊断方向、证据和建议挤在一个无标题长段落中')
+  })
+
+  it('keeps research guardrails while removing the neurosurgery role when neurosurgery mode is off', async () => {
+    const chat = vi.fn()
+    mockElectronApi({ chat })
+    useChatStore.setState({
+      currentChatId: 'chat-1',
+      currentMessages: [],
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('神经外科模式'))
+    fireEvent.change(screen.getByPlaceholderText('输入您的科研问题...'), { target: { value: '请总结围手术期感染预防证据' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled()
+    })
+    const [{ messages }] = chat.mock.calls[0]
+    expect(messages[0].content).toContain('不得编造 PMID')
+    expect(messages[0].content).toContain('医学证据类回答结构')
+    expect(messages[0].content).toContain('可追踪引用')
+    expect(messages[0].content).not.toContain('资深神经外科科研顾问')
+  })
+
+  it('keeps streaming output with the originating chat when switching away and back', async () => {
+    let deltaHandler: ((chunk: string) => void) | undefined
+    let completeHandler: (() => void | Promise<void>) | undefined
+    const dbCreateChat = vi.fn()
+    const dbInsertMessage = vi.fn()
+    const api = mockElectronApi({
+      dbCreateChat,
+      dbInsertMessage,
+      dbGetChats: vi.fn().mockResolvedValue([{
+        id: 'other-chat',
+        title: '其他对话',
+        model: 'gpt-5.5',
+        reasoningEffort: '',
+        createdAt: 1,
+        updatedAt: 1,
+      }]),
+      dbGetMessages: vi.fn().mockImplementation((chatId: string) => {
+        if (chatId === 'other-chat') {
+          return Promise.resolve([{
+            id: 'other-message',
+            chatId: 'other-chat',
+            role: 'user',
+            content: '其他问题',
+            createdAt: 1,
+          }])
+        }
+        return Promise.resolve([])
+      }),
+      onChatDelta: vi.fn((handler) => {
+        deltaHandler = handler
+      }),
+      onChatComplete: vi.fn((handler) => {
+        completeHandler = handler
+      }),
+      chat: vi.fn().mockResolvedValue(undefined),
+    })
+    render(<App />)
+
+    fireEvent.change(await screen.findByPlaceholderText('输入您的科研问题...'), { target: { value: '胶质母细胞瘤复发治疗进展' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(dbCreateChat).toHaveBeenCalled()
+      expect(api.chat).toHaveBeenCalled()
+    })
+    const createdChat = dbCreateChat.mock.calls[0][0]
+
+    fireEvent.click(await screen.findByText('其他对话'))
+    await waitFor(() => {
+      expect(screen.getByText('其他问题')).toBeTruthy()
+    })
+
+    deltaHandler?.('生成内容')
+    await completeHandler?.()
+
+    await waitFor(() => {
+      expect(dbInsertMessage).toHaveBeenCalledWith(expect.objectContaining({
+        chatId: createdChat.id,
+        role: 'assistant',
+        content: '生成内容',
+      }))
+    })
+
+    fireEvent.click(screen.getByText('胶质母细胞瘤复发治疗进展'))
+    expect(await screen.findByText('生成内容')).toBeTruthy()
   })
 
   it('shows Chinese PubMed query guidance when searching from a Chinese question', async () => {

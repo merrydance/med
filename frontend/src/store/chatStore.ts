@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ChatSession, ChatMessage } from '../types/chat'
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.5'
-export const DEFAULT_REASONING_EFFORT = ''
+export const DEFAULT_REASONING_EFFORT = 'high'
 
 interface ChatState {
   chats: ChatSession[]
@@ -15,10 +15,11 @@ interface ChatState {
 
   loadChats: () => Promise<void>
   switchChat: (chatId: string) => Promise<void>
+  startNewDraft: () => void
   createNewChat: (config?: Partial<Pick<ChatSession, 'model' | 'reasoningEffort'>>) => Promise<ChatSession>
-  addMessage: (message: ChatMessage) => void
-  appendAssistantStream: (chunk: string) => void
-  finalizeStream: () => Promise<void>
+  addMessage: (message: ChatMessage, chatId?: string) => void
+  appendAssistantStream: (chunk: string, chatId?: string) => void
+  finalizeStream: (chatId?: string) => Promise<void>
   setStreaming: (streaming: boolean) => void
   updateChatTitle: (chatId: string, title: string) => void
   updateChatModelConfig: (chatId: string | null, config: Pick<ChatSession, 'model' | 'reasoningEffort'>) => void
@@ -51,43 +52,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setStreaming: (streaming: boolean) => set({ isStreaming: streaming }),
 
   // ====== 流式追加（高频，不写盘） ======
-  appendAssistantStream: (chunk: string) => {
-    const { currentChatId, currentMessages } = get()
-    if (!currentChatId || currentMessages.length === 0) return
+  appendAssistantStream: (chunk: string, chatId?: string) => {
+    const { currentChatId, currentMessages, chats } = get()
+    const targetChatId = chatId || currentChatId
+    if (!targetChatId) return
 
-    const lastMsg = currentMessages[currentMessages.length - 1]
+    const isCurrentChat = currentChatId === targetChatId
+    const targetMessages = isCurrentChat
+      ? currentMessages
+      : chats.find((chat) => chat.id === targetChatId)?.messages || []
+    if (targetMessages.length === 0) return
+
+    const lastMsg = targetMessages[targetMessages.length - 1]
     if (lastMsg.role !== 'assistant') return
 
     const updatedMsg = { ...lastMsg, content: lastMsg.content + chunk }
-    const newMessages = [...currentMessages.slice(0, -1), updatedMsg]
-    set({ currentMessages: newMessages })
-    // 注意：这里故意不更新 chats 数组也不写盘，避免每个 chunk 都触发全量渲染
+    const newMessages = [...targetMessages.slice(0, -1), updatedMsg]
+    const updatedChats = chats.map((chat) =>
+      chat.id === targetChatId ? { ...chat, messages: newMessages, updatedAt: Date.now() } : chat
+    )
+
+    set({
+      chats: updatedChats,
+      ...(isCurrentChat ? { currentMessages: newMessages } : {})
+    })
+    // 仍不写盘，避免每个 chunk 都触发持久化；流结束后 finalizeStream 统一写入
   },
 
   // ====== 流结束后一次性落盘 ======
-  finalizeStream: async () => {
+  finalizeStream: async (chatId?: string) => {
     const { currentChatId, currentMessages, chats } = get()
-    if (!currentChatId || currentMessages.length === 0) return
+    const targetChatId = chatId || currentChatId
+    if (!targetChatId) return
 
-    const lastMsg = currentMessages[currentMessages.length - 1]
+    const isCurrentChat = currentChatId === targetChatId
+    const targetMessages = isCurrentChat
+      ? currentMessages
+      : chats.find((chat) => chat.id === targetChatId)?.messages || []
+    if (targetMessages.length === 0) return
+
+    const lastMsg = targetMessages[targetMessages.length - 1]
     if (lastMsg.role !== 'assistant') return
 
     // 同步内存中的 chats 列表
     const updatedChats = chats.map((c) =>
-      c.id === currentChatId ? { ...c, messages: currentMessages, updatedAt: Date.now() } : c
+      c.id === targetChatId ? { ...c, messages: targetMessages, updatedAt: Date.now() } : c
     )
-    set({ chats: updatedChats })
+    set({
+      chats: updatedChats,
+      ...(isCurrentChat ? { currentMessages: targetMessages } : {})
+    })
 
     // 持久化
     if (hasDb()) {
       await window.electronAPI.dbInsertMessage({
         id: lastMsg.id,
-        chatId: currentChatId,
+        chatId: targetChatId,
         role: lastMsg.role,
         content: lastMsg.content,
         createdAt: lastMsg.createdAt
       })
-      await window.electronAPI.dbTouchChat(currentChatId)
+      await window.electronAPI.dbTouchChat(targetChatId)
     } else {
       localStorage.setItem('app-chats', JSON.stringify(updatedChats))
     }
@@ -116,10 +141,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       if (hasDb()) {
         const messages = await window.electronAPI.dbGetMessages(chatId)
-        const chat = get().chats.find((c) => c.id === chatId)
+        const chats = get().chats
+        const chat = chats.find((c) => c.id === chatId)
+        const cachedMessages = chat?.messages || []
+        const selectedMessages = cachedMessages.length >= messages.length
+          ? cachedMessages
+          : messages as ChatMessage[]
+        const updatedChats = chats.map((c) =>
+          c.id === chatId ? { ...c, messages: selectedMessages } : c
+        )
         set({
+          chats: updatedChats,
           currentChatId: chatId,
-          currentMessages: messages as ChatMessage[],
+          currentMessages: selectedMessages,
           draftModel: chat?.model || DEFAULT_CHAT_MODEL,
           draftReasoningEffort: chat?.reasoningEffort || DEFAULT_REASONING_EFFORT
         })
@@ -137,6 +171,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (e) {
       console.error('Failed to switch chat', e)
     }
+  },
+
+  startNewDraft: () => {
+    set({
+      currentChatId: null,
+      currentMessages: []
+    })
   },
 
   // ====== 新建会话 ======
@@ -180,13 +221,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // ====== 添加单条消息（用户消息 / 空 assistant 占位） ======
-  addMessage: (message: ChatMessage) => {
+  addMessage: (message: ChatMessage, chatId?: string) => {
     const { currentChatId, chats, currentMessages } = get()
-    if (!currentChatId) return
+    const targetChatId = chatId || currentChatId
+    if (!targetChatId) return
 
-    const newMessages = [...currentMessages, message]
+    const isCurrentChat = currentChatId === targetChatId
+    const targetMessages = isCurrentChat
+      ? currentMessages
+      : chats.find((chat) => chat.id === targetChatId)?.messages || []
+    const newMessages = [...targetMessages, message]
     const updatedChats = chats.map((c) => {
-      if (c.id === currentChatId) {
+      if (c.id === targetChatId) {
         let newTitle = c.title
         if (newMessages.length === 1 && message.role === 'user') {
           newTitle = message.content.length > 15
@@ -199,30 +245,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
 
     // 置顶当前会话
-    const idx = updatedChats.findIndex((c) => c.id === currentChatId)
+    const idx = updatedChats.findIndex((c) => c.id === targetChatId)
     if (idx > 0) {
       const chat = updatedChats.splice(idx, 1)[0]
       updatedChats.unshift(chat)
     }
 
-    set({ chats: updatedChats, currentMessages: newMessages })
+    set({
+      chats: updatedChats,
+      ...(isCurrentChat ? { currentMessages: newMessages } : {})
+    })
 
     // 用户消息立即落盘；assistant 占位（content=''）不落盘，等流结束后 finalizeStream 统一写入
     if (message.role === 'user' && message.content) {
       if (hasDb()) {
         window.electronAPI.dbInsertMessage({
           id: message.id,
-          chatId: currentChatId,
+          chatId: targetChatId,
           role: message.role,
           content: message.content,
           createdAt: message.createdAt
         })
         // 如果标题被更新了，也同步写盘
-        const updatedChat = updatedChats.find((c) => c.id === currentChatId)
+        const updatedChat = updatedChats.find((c) => c.id === targetChatId)
         if (updatedChat && updatedChat.title !== '新对话') {
-          window.electronAPI.dbUpdateChatTitle(currentChatId, updatedChat.title)
+          window.electronAPI.dbUpdateChatTitle(targetChatId, updatedChat.title)
         }
-        window.electronAPI.dbTouchChat(currentChatId)
+        window.electronAPI.dbTouchChat(targetChatId)
       } else {
         localStorage.setItem('app-chats', JSON.stringify(updatedChats))
       }

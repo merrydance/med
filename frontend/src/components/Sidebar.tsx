@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ themeLabel, showSettings, showAbout, onToggleTheme, onToggleSettings, onToggleAbout }: SidebarProps) {
-  const { chats, currentChatId, isLoaded, loadChats, switchChat, createNewChat, deleteChat } = useChatStore()
+  const { chats, currentChatId, isLoaded, loadChats, switchChat, startNewDraft, deleteChat } = useChatStore()
 
   useEffect(() => {
     loadChats()
@@ -24,7 +24,7 @@ export function Sidebar({ themeLabel, showSettings, showAbout, onToggleTheme, on
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <button className="sidebar-new-btn" onClick={() => createNewChat()}>
+        <button className="sidebar-new-btn" onClick={() => startNewDraft()}>
           + 新建对话
         </button>
       </div>

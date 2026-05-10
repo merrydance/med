@@ -55,12 +55,18 @@ export function ChatArea() {
   const messagesRef = useRef<HTMLDivElement>(null)
   const isUserScrollingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const streamingChatIdRef = useRef<string | null>(null)
 
-  const appendToAssistantBubble = useCallback((content: string) => {
-    const { currentMessages: latestMessages } = useChatStore.getState()
-    const lastMsg = latestMessages[latestMessages.length - 1]
+  const appendToAssistantBubble = useCallback((content: string, chatId?: string) => {
+    const { currentChatId: latestChatId, currentMessages: latestMessages, chats } = useChatStore.getState()
+    const targetChatId = chatId || latestChatId || undefined
+    const targetMessages = targetChatId === latestChatId
+      ? latestMessages
+      : chats.find((chat) => chat.id === targetChatId)?.messages || []
+    const lastMsg = targetMessages[targetMessages.length - 1]
     if (lastMsg?.role === 'assistant') {
-      appendAssistantStream(content)
+      appendAssistantStream(content, targetChatId)
       return
     }
 
@@ -69,7 +75,7 @@ export function ChatArea() {
       role: 'system',
       content,
       createdAt: Date.now()
-    })
+    }, targetChatId)
   }, [addMessage, appendAssistantStream])
 
   // ====== 滚动锁定逻辑 (Task 4.1.1) ======
@@ -140,16 +146,20 @@ export function ChatArea() {
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI.onChatDelta((chunk) => {
-        appendAssistantStream(chunk)
+        appendAssistantStream(chunk, streamingChatIdRef.current || undefined)
       })
       window.electronAPI.onChatComplete(async () => {
-        await finalizeStream()
+        const targetChatId = streamingChatIdRef.current || undefined
+        await finalizeStream(targetChatId)
+        streamingChatIdRef.current = null
         setStreaming(false)
       })
       window.electronAPI.onChatError((errMsg) => {
+        const targetChatId = streamingChatIdRef.current || undefined
+        streamingChatIdRef.current = null
         setStreaming(false)
         setIsPreparing(false)
-        appendToAssistantBubble(`\n\n错误: ${errMsg}`)
+        appendToAssistantBubble(`\n\n错误: ${errMsg}`, targetChatId)
       })
     }
   }, [appendAssistantStream, finalizeStream, setStreaming, appendToAssistantBubble])
@@ -165,7 +175,13 @@ export function ChatArea() {
 - 区分“检索证据”“上传文档证据”“模型背景知识”和“推断”。推断必须标注为推断。
 - 不得把模型背景知识包装成检索证据或上传文档证据；没有出现在检索结果或上传文档中的来源，不能作为可追踪引用列出。
 - 医疗建议仅作科研和临床决策辅助，不能替代医生判断；涉及诊疗需说明适用前提、风险、禁忌和不确定性。
-- 默认使用中文，结构清晰，必要时使用表格。
+- 默认使用中文，必须使用 Markdown 分层排版，让医生能快速扫读重点。
+排版硬性规则：
+- 除非用户只要求一句话回答，否则必须使用二级标题组织内容，优先使用以下标题：## 先说结论、## 分析依据、## 下一步建议、## 风险信号、## 可追踪引用。
+- “先说结论”必须放在最前，使用 1-3 条短句或项目符号，直接回答问题并标明证据是否充分。
+- 多个诊断方向、治疗方案、研究发现或建议必须使用项目符号或表格；不要把多个诊断方向、证据和建议挤在一个无标题长段落中。
+- 每个自然段尽量不超过 4 行；重要限定词使用加粗，例如 **证据不足**、**需要急诊**、**推断**。
+- 如果没有可追踪来源，仍保留“## 可追踪引用”标题，并明确写“未检索到足够直接证据，不能编造 PMID、DOI 或指南链接”。
 医学证据类回答结构：
 当问题涉及诊疗决策、文献解读、指南推荐、疗效比较、风险评估、用药、手术策略或证据等级判断时，优先使用以下结构：
 1. 简要结论：先给出直接回答，并标明证据是否充分。
@@ -218,22 +234,22 @@ export function ChatArea() {
     return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${truncated}\n---\n\n${query}`
   }
 
-  const getSearchContext = async (query: string) => {
+  const getSearchContext = async (query: string, chatId: string) => {
     if (!enableSearch || !query.trim() || !window.electronAPI) return ''
 
     const sourceLabel = tavilyKey ? 'PubMed + 网络' : 'PubMed'
     if (/[\u3400-\u9fff]/.test(query)) {
-      appendAssistantStream('PubMed 对英文检索词和 MeSH/ATM 更友好；已将中文问题交给检索模块生成辅助检索式，结果仍需结合原文核验。\n\n')
+      appendAssistantStream('PubMed 对英文检索词和 MeSH/ATM 更友好；已将中文问题交给检索模块生成辅助检索式，结果仍需结合原文核验。\n\n', chatId)
     }
-    appendAssistantStream(`正在搜索 ${sourceLabel}...\n\n`)
+    appendAssistantStream(`正在搜索 ${sourceLabel}...\n\n`, chatId)
 
     const context = await window.electronAPI.searchTavily(query)
     if (!context) {
-      appendAssistantStream('未检索到可用结果，继续基于已有上下文回答。\n\n')
+      appendAssistantStream('未检索到可用结果，继续基于已有上下文回答。\n\n', chatId)
       return ''
     }
 
-    appendAssistantStream('搜索完成，正在结合检索结果分析...\n\n')
+    appendAssistantStream('搜索完成，正在结合检索结果分析...\n\n', chatId)
     return `\n\n=== 实时检索结果 ===\n请优先结合以下最新检索结果回答，并在回答末尾列出真实引用链接。若结果不足，请明确说明未检索到足够证据，不能编造引用：\n${context}`
   }
 
@@ -327,12 +343,15 @@ export function ChatArea() {
     const trimmedInput = inputText.trim()
     if ((!trimmedInput && !pendingFile) || isStreaming || isPreparing || isParsingFile) return
 
-    if (!currentChatId) {
-      await createNewChat({
+    let targetChatId = currentChatId
+    if (!targetChatId) {
+      const chat = await createNewChat({
         model: draftModel,
         reasoningEffort: draftReasoningEffort
       })
+      targetChatId = chat.id
     }
+    if (!targetChatId) return
 
     const userContent = await buildUserContent(trimmedInput)
 
@@ -343,7 +362,7 @@ export function ChatArea() {
       createdAt: Date.now()
     }
 
-    addMessage(userMsg)
+    addMessage(userMsg, targetChatId)
     setInputText('')
     setPendingFile(null)
     setFileStatus('')
@@ -355,17 +374,18 @@ export function ChatArea() {
       content: '',
       createdAt: Date.now()
     }
-    addMessage(aiMsg)
+    addMessage(aiMsg, targetChatId)
+    streamingChatIdRef.current = targetChatId
     setStreaming(true)
     setIsPreparing(true)
 
     if (window.electronAPI) {
       let searchContext = ''
       try {
-        searchContext = await getSearchContext(trimmedInput || pendingFile?.name || '')
+        searchContext = await getSearchContext(trimmedInput || pendingFile?.name || '', targetChatId)
       } catch (error) {
         const message = error instanceof Error ? error.message : '搜索失败'
-        appendAssistantStream(`搜索失败：${message}\n\n`)
+        appendAssistantStream(`搜索失败：${message}\n\n`, targetChatId)
       }
 
       setIsPreparing(false)
@@ -391,7 +411,8 @@ export function ChatArea() {
     } else {
       setIsPreparing(false)
       setTimeout(() => {
-        appendAssistantStream('（网页版模拟）**Markdown 渲染**已就绪！\n\n| 功能 | 状态 |\n|---|---|\n| 代码高亮 | ✅ |\n| XSS 过滤 | ✅ |\n| 表格横向滚动 | ✅ |\n\n```python\nprint("Hello, Neurosurgery!")\n```')
+        appendAssistantStream('（网页版模拟）**Markdown 渲染**已就绪！\n\n| 功能 | 状态 |\n|---|---|\n| 代码高亮 | ✅ |\n| XSS 过滤 | ✅ |\n| 表格横向滚动 | ✅ |\n\n```python\nprint("Hello, Neurosurgery!")\n```', targetChatId)
+        streamingChatIdRef.current = null
         setStreaming(false)
       }, 800)
     }
@@ -410,6 +431,46 @@ export function ChatArea() {
       reasoningEffort
     })
   }
+
+  const resizeComposerInput = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`
+  }, [])
+
+  useEffect(() => {
+    resizeComposerInput()
+  }, [inputText, resizeComposerInput])
+
+  const renderToolToggles = () => (
+    <div className="chat-toolbar">
+      <label className={`tool-toggle ${enableDoc ? 'active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={enableDoc}
+          onChange={(e) => setEnableDoc(e.target.checked)}
+        />
+        文档分析
+      </label>
+      <label className={`tool-toggle ${enableNeuro ? 'active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={enableNeuro}
+          onChange={(e) => setEnableNeuro(e.target.checked)}
+        />
+        神经外科模式
+      </label>
+      <label className={`tool-toggle ${enableSearch ? 'active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={enableSearch}
+          onChange={(e) => setEnableSearch(e.target.checked)}
+        />
+        联网搜索
+      </label>
+    </div>
+  )
 
   const renderComposer = (variant: 'welcome' | 'dock') => (
     <>
@@ -480,12 +541,18 @@ export function ChatArea() {
               <path d="M21.4 10.6 12 20a5.4 5.4 0 0 1-7.6-7.6l9.5-9.5a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.1-8.1" />
             </svg>
           </button>
-          <input
-            type="text"
+          <textarea
+            ref={inputRef}
+            rows={1}
             className="chat-input"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
             placeholder={isParsingFile ? '正在解析文档，请稍候...' : '输入您的科研问题...'}
             disabled={isParsingFile}
           />
@@ -547,6 +614,7 @@ export function ChatArea() {
         <div className="welcome-composer">
           <div className="welcome-kicker">{APP_TITLE}</div>
           <div className="welcome-title">从哪个问题开始？</div>
+          {renderToolToggles()}
           {renderComposer('welcome')}
         </div>
       </div>
@@ -555,32 +623,7 @@ export function ChatArea() {
 
   return (
     <div className="chat-area">
-      <div className="chat-toolbar">
-        <label className={`tool-toggle ${enableDoc ? 'active' : ''}`}>
-          <input
-            type="checkbox"
-            checked={enableDoc}
-            onChange={(e) => setEnableDoc(e.target.checked)}
-          />
-          文档分析
-        </label>
-        <label className={`tool-toggle ${enableSearch ? 'active' : ''}`}>
-          <input
-            type="checkbox"
-            checked={enableSearch}
-            onChange={(e) => setEnableSearch(e.target.checked)}
-          />
-          联网搜索
-        </label>
-        <label className={`tool-toggle ${enableNeuro ? 'active' : ''}`}>
-          <input
-            type="checkbox"
-            checked={enableNeuro}
-            onChange={(e) => setEnableNeuro(e.target.checked)}
-          />
-          神经外科模式
-        </label>
-      </div>
+      {renderToolToggles()}
 
       <div className="chat-messages" ref={messagesRef}>
         {currentMessages.map(msg => (

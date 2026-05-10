@@ -33,6 +33,16 @@ describe('renderMarkdownHtml', () => {
     expect(html).toContain('rel="noopener noreferrer"')
   })
 
+  it('preserves single line breaks in clinical narrative output', () => {
+    const html = renderMarkdownHtml([
+      '前庭性偏头痛：常见，可反复眩晕。',
+      '梅尼埃病：需要关注耳鸣和听力波动。',
+      'BPPV：与体位变化相关。'
+    ].join('\n'))
+
+    expect(html).toContain('<br>')
+  })
+
   it('highlights fenced code blocks', () => {
     const html = renderMarkdownHtml('```js\nconst dose = 5\n```')
 
