@@ -73,6 +73,7 @@ export interface ElectronAPI {
   testConnection: () => Promise<ConnectionTestResult>;
   
   openFileDialog: () => Promise<string | null>;
+  openFileDialogs?: () => Promise<string[]>;
   readFile: (path: string) => Promise<FileReadResult>;
   selectDocumentContext: (payload: {
     name: string;

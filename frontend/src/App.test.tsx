@@ -23,6 +23,7 @@ function mockElectronApi(overrides: Partial<ElectronAPI> = {}) {
     saveSettings: vi.fn().mockResolvedValue(true),
     testConnection: vi.fn(),
     openFileDialog: vi.fn(),
+    openFileDialogs: vi.fn(),
     readFile: vi.fn(),
     selectDocumentContext: vi.fn(),
     dbGetChats: vi.fn().mockResolvedValue([]),
@@ -166,5 +167,39 @@ describe('App settings controls', () => {
     })
     expect(screen.getByText('paper.pdf')).toBeTruthy()
     expect(api.readFile).toHaveBeenCalledWith('/tmp/paper.pdf')
+  })
+
+  it('queues multiple selected documents and shows per-file parse status', async () => {
+    const api = mockElectronApi({
+      openFileDialogs: vi.fn().mockResolvedValue(['/tmp/a.pdf', '/tmp/b.pdf']),
+      readFile: vi.fn()
+        .mockResolvedValueOnce({
+          name: 'a.pdf',
+          text: '第一篇论文',
+          pages: 8,
+          provider: 'docling',
+          warnings: [],
+        })
+        .mockResolvedValueOnce({
+          name: 'b.pdf',
+          text: '第二篇论文',
+          pages: 4,
+          provider: 'pdf-parse',
+          fallbackFrom: 'docling',
+          warnings: ['未检测到 Docling，已自动使用兼容解析。'],
+        }),
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '上传文档' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('文档队列 2/2').length).toBeGreaterThan(0)
+    })
+    expect(screen.getByText('a.pdf')).toBeTruthy()
+    expect(screen.getAllByText('b.pdf').length).toBeGreaterThan(0)
+    expect(screen.getByText('高级解析完成')).toBeTruthy()
+    expect(screen.getByText('未检测到 Docling，已自动使用兼容解析。')).toBeTruthy()
+    expect(api.readFile).toHaveBeenCalledTimes(2)
   })
 })

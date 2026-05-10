@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 文件系统
   openFileDialog: () => ipcRenderer.invoke('file:dialog'),
+  openFileDialogs: () => ipcRenderer.invoke('file:dialogs'),
   readFile: (p) => ipcRenderer.invoke('file:read', p),
   selectDocumentContext: (payload) => ipcRenderer.invoke('rag:selectContext', payload),
 

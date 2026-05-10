@@ -12,6 +12,7 @@
     "test:frontend": "npm --prefix frontend run test",
     "test:main": "node --test tests/main/*.test.js",
     "test": "npm run test:main && npm run test:frontend",
+    "eval:docs": "node scripts/evaluate-documents.js",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir"
   },

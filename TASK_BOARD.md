@@ -201,11 +201,15 @@
   - [ ] 仍需用真实几百页指南手测：在有限 token 内精准找到用药剂量。
 
 ### [Task-5.3.1] [前端] 多文件拖拽与 Meta 分析交互界面
-- **Assignee**: (待认领)
-- **涉及范围**: `frontend/src/components/UploadArea.tsx`, `MetaTable.tsx`
+- **Assignee**: Codex
+- **涉及范围**: `main.js`, `preload.js`, `frontend/src/components/ChatArea.tsx`
 - **Action**:
-  1. 支持将多个 PDF 拖拽入解析区。
-  2. 显示列队解析的进度条（如：`解析中 2/10...`）。
+  1. [x] 支持一次选择多个 PDF/TXT/MD 文档进入解析队列。
+  2. [x] 显示队列解析进度（如：`文档队列 2/2`）和每个文件的等待、解析中、完成、失败/回退状态。
+  3. [ ] 拖拽上传区域尚未单独实现；当前先复用上传按钮的多选队列。
+- **DoD**:
+  - [x] 已补充前端测试覆盖多文件选择、逐个解析、Docling 回退提示和队列完成状态。
+  - [ ] 仍需真实拖入 5 篇 PDF 手测队列耗时、内存占用和用户感知。
 
 ### [Task-5.3.2] [主进程] Meta 分析并发控制与结构化提取
 - **Assignee**: (待认领)

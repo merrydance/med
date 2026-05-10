@@ -17,6 +17,15 @@ const MODEL_OPTIONS = [
   { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
 ]
 
+type FileQueueItem = {
+  id: string
+  path: string
+  name: string
+  status: 'waiting' | 'parsing' | 'done' | 'error'
+  result?: FileReadResult
+  message?: string
+}
+
 export function ChatArea() {
   const {
     currentChatId,
@@ -40,6 +49,7 @@ export function ChatArea() {
   const [isPreparing, setIsPreparing] = useState(false)
   const [isParsingFile, setIsParsingFile] = useState(false)
   const [fileStatus, setFileStatus] = useState('')
+  const [fileQueue, setFileQueue] = useState<FileQueueItem[]>([])
   const messagesRef = useRef<HTMLDivElement>(null)
   const isUserScrollingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -207,28 +217,70 @@ export function ChatArea() {
     return `\n\n=== 实时检索结果 ===\n请优先结合以下最新检索结果回答，并在回答中说明信息来源：\n${context}`
   }
 
+  const getFileNameFromPath = (filePath: string) => {
+    return filePath.split(/[\\/]/).filter(Boolean).pop() || filePath
+  }
+
+  const describeParsedFile = (file: FileReadResult) => {
+    const warning = file.warnings?.[0]
+    if (warning) return warning
+    if (file.provider === 'docling') return '高级解析完成，已保留更完整的段落和表格文本。'
+    if (file.provider === 'pdf-parse') return '兼容解析完成'
+    return '文档已读取'
+  }
+
   const handleUpload = async () => {
     if (!window.electronAPI || isStreaming || isParsingFile) return
 
     try {
-      const filePath = await window.electronAPI.openFileDialog()
-      if (!filePath) return
+      let filePaths: string[] = []
+      if (window.electronAPI.openFileDialogs) {
+        const selectedPaths = await window.electronAPI.openFileDialogs()
+        if (Array.isArray(selectedPaths) && selectedPaths.length) filePaths = selectedPaths
+      }
+      if (!filePaths.length) {
+        const filePath = await window.electronAPI.openFileDialog()
+        if (filePath) filePaths = [filePath]
+      }
+      if (!filePaths.length) return
 
       setIsParsingFile(true)
       setFileStatus('正在读取文档，请稍候...')
-      const file = await window.electronAPI.readFile(filePath)
-      setPendingFile(file)
-      setEnableDoc(true)
-      const warning = file.warnings?.[0]
-      if (warning) {
-        setFileStatus(warning)
-      } else if (file.provider === 'docling') {
-        setFileStatus('高级解析完成，已保留更完整的段落和表格文本。')
-      } else if (file.provider === 'pdf-parse') {
-        setFileStatus('兼容解析完成，可以继续提问。')
-      } else {
-        setFileStatus('文档已读取，可以继续提问。')
+
+      const initialQueue = filePaths.map((filePath, index) => ({
+        id: `${Date.now()}-${index}`,
+        path: filePath,
+        name: getFileNameFromPath(filePath),
+        status: 'waiting' as const,
+      }))
+      setFileQueue(initialQueue)
+
+      for (const item of initialQueue) {
+        setFileQueue((queue) => queue.map((queued) => (
+          queued.id === item.id ? { ...queued, status: 'parsing' } : queued
+        )))
+
+        try {
+          const file = await window.electronAPI.readFile(item.path)
+          setPendingFile(file)
+          setEnableDoc(true)
+          setFileQueue((queue) => queue.map((queued) => (
+            queued.id === item.id
+              ? { ...queued, name: file.name, status: 'done', result: file, message: describeParsedFile(file) }
+              : queued
+          )))
+          setFileStatus(filePaths.length > 1 ? `文档队列 ${initialQueue.indexOf(item) + 1}/${initialQueue.length}` : describeParsedFile(file))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '文件读取失败'
+          setFileQueue((queue) => queue.map((queued) => (
+            queued.id === item.id ? { ...queued, status: 'error', message } : queued
+          )))
+          setFileStatus(message)
+        }
       }
+
+      const completed = initialQueue.length
+      if (completed > 1) setFileStatus(`文档队列 ${completed}/${completed}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : '文件读取失败'
       setFileStatus('')
@@ -362,6 +414,30 @@ export function ChatArea() {
             <span className="file-preview-status">
               PDF 会优先尝试本地 Docling 高级解析；如果本机未安装或耗时过长，会自动切换到兼容解析。
             </span>
+          </div>
+        </div>
+      )}
+
+      {fileQueue.length > 1 && (
+        <div className="file-queue-panel">
+          <div className="file-queue-header">
+            <span>文档队列 {fileQueue.filter((item) => item.status === 'done' || item.status === 'error').length}/{fileQueue.length}</span>
+            <button className="file-preview-remove" onClick={() => setFileQueue([])}>
+              收起
+            </button>
+          </div>
+          <div className="file-queue-list">
+            {fileQueue.map((item) => (
+              <div key={item.id} className={`file-queue-item ${item.status}`}>
+                <span className="file-queue-name">{item.name}</span>
+                <span className="file-queue-status">
+                  {item.status === 'waiting' ? '等待解析' : ''}
+                  {item.status === 'parsing' ? '解析中...' : ''}
+                  {item.status === 'done' ? (item.result?.provider === 'docling' ? '高级解析完成' : item.message || '完成') : ''}
+                  {item.status === 'error' ? item.message || '解析失败' : ''}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

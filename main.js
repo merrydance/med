@@ -151,6 +151,18 @@ ipcMain.handle('file:dialog', async () => {
   return result.filePaths[0];
 });
 
+ipcMain.handle('file:dialogs', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: '文档', extensions: ['pdf', 'txt', 'md', 'doc', 'docx'] },
+      { name: '所有文件', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return [];
+  return result.filePaths;
+});
+
 ipcMain.handle('rag:selectContext', (_, payload) => {
   return buildDocumentContext({
     name: payload?.name,
