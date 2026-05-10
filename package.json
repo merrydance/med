@@ -4,14 +4,23 @@
   "description": "神经外科 AI 科研助手",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"npm --prefix frontend run dev -- --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
+    "start": "npm run build:frontend && electron .",
+    "start:dev": "electron . --dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "test:frontend": "npm --prefix frontend run test",
+    "test:main": "node --test tests/main/*.test.js",
+    "test": "npm run test:main && npm run test:frontend",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir"
   },
   "build": {
     "appId": "com.neuro.research.assistant",
     "productName": "神经外科AI科研助手",
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "win": {
       "target": "nsis",
       "icon": "icon.png"
@@ -23,10 +32,13 @@
     }
   },
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "electron": "^35.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "wait-on": "^9.0.5"
   }
 }
