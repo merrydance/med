@@ -3,6 +3,8 @@ import './App.css'
 import { SettingsPanel } from './components/SettingsPanel'
 import { Sidebar } from './components/Sidebar'
 import { ChatArea } from './components/ChatArea'
+import { WindowTitleBar } from './components/WindowTitleBar'
+import { AboutPanel } from './components/AboutPanel'
 import { useSettingStore } from './store/settingStore'
 import type { AppSettings } from './types/env'
 
@@ -20,6 +22,7 @@ function getNextTheme(theme: NonNullable<AppSettings['theme']>) {
 
 function App() {
   const [showSettings, setShowSettings] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const { theme = 'system', setField, loadSettings, saveSettings } = useSettingStore()
 
   useEffect(() => {
@@ -47,20 +50,38 @@ function App() {
     }
   }
 
+  const handleToggleSettings = () => {
+    setShowSettings(!showSettings)
+    if (!showSettings) setShowAbout(false)
+  }
+
+  const handleToggleAbout = () => {
+    setShowAbout(!showAbout)
+    if (!showAbout) setShowSettings(false)
+  }
+
   return (
     <div className="app-layout">
-      <Sidebar
-        themeLabel={themeLabels[theme]}
-        showSettings={showSettings}
-        onToggleTheme={handleToggleTheme}
-        onToggleSettings={() => setShowSettings(!showSettings)}
-      />
-      <div style={{ flex: 1, position: 'relative' }}>
-        <ChatArea />
+      <WindowTitleBar />
+      <div className="app-body">
+        <Sidebar
+          themeLabel={themeLabels[theme]}
+          showSettings={showSettings}
+          showAbout={showAbout}
+          onToggleTheme={handleToggleTheme}
+          onToggleSettings={handleToggleSettings}
+          onToggleAbout={handleToggleAbout}
+        />
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          <ChatArea />
 
-        {showSettings && (
-          <SettingsPanel onClose={() => setShowSettings(false)} />
-        )}
+          {showSettings && (
+            <SettingsPanel onClose={() => setShowSettings(false)} />
+          )}
+          {showAbout && (
+            <AboutPanel onClose={() => setShowAbout(false)} />
+          )}
+        </div>
       </div>
     </div>
   )

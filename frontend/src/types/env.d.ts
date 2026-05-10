@@ -73,6 +73,10 @@ export interface ElectronAPI {
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<boolean>;
   testConnection: () => Promise<ConnectionTestResult>;
+
+  minimizeWindow?: () => Promise<void>;
+  toggleMaximizeWindow?: () => Promise<void>;
+  closeWindow?: () => Promise<void>;
   
   openFileDialog: () => Promise<string | null>;
   openFileDialogs?: () => Promise<string[]>;

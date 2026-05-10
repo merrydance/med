@@ -1,7 +1,7 @@
 {
   "name": "neuro-research-assistant",
   "version": "1.0.0",
-  "description": "神经外科 AI 科研助手",
+  "description": "神外医生AI助手",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently -k -n vite,electron -c cyan,magenta \"npm --prefix frontend run dev -- --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
@@ -18,13 +18,13 @@
   },
   "build": {
     "appId": "com.neuro.research.assistant",
-    "productName": "神经外科AI科研助手",
+    "productName": "神外医生AI助手",
     "directories": {
       "output": "dist"
     },
     "win": {
       "target": "nsis",
-      "icon": "icon.png"
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": true,

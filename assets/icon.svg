@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="神外医生AI助手">
+  <defs>
+    <linearGradient id="bg" x1="188" x2="836" y1="152" y2="872" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="0.52" stop-color="#155E75"/>
+      <stop offset="1" stop-color="#312E81"/>
+    </linearGradient>
+    <linearGradient id="node" x1="274" x2="748" y1="260" y2="764" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DDF7F5"/>
+      <stop offset="1" stop-color="#A7F3D0"/>
+    </linearGradient>
+    <filter id="shadow" x="56" y="56" width="912" height="912" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="44" flood-color="#020617" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <path fill="#F8FAFC" fill-opacity="0.96" d="M512 164c160 0 290 130 290 290 0 82-35 157-91 210v88c0 39-32 71-71 71H384c-39 0-71-32-71-71v-88a288 288 0 0 1-91-210c0-160 130-290 290-290Z"/>
+  </g>
+  <path fill="#E0F2FE" d="M342 635c43 32 96 51 154 51h32c58 0 111-19 154-51v110c0 15-12 27-27 27H369c-15 0-27-12-27-27V635Z"/>
+
+  <path fill="none" stroke="#155E75" stroke-linecap="round" stroke-linejoin="round" stroke-width="44" d="M353 501c45-35 86-35 124 0s79 35 124 0 86-35 124 0"/>
+  <path fill="none" stroke="#155E75" stroke-linecap="round" stroke-linejoin="round" stroke-width="44" d="M353 397c45-35 86-35 124 0s79 35 124 0 86-35 124 0"/>
+
+  <g fill="url(#node)">
+    <circle cx="354" cy="397" r="45"/>
+    <circle cx="477" cy="397" r="38"/>
+    <circle cx="601" cy="397" r="38"/>
+    <circle cx="725" cy="397" r="45"/>
+    <circle cx="354" cy="501" r="45"/>
+    <circle cx="477" cy="501" r="38"/>
+    <circle cx="601" cy="501" r="38"/>
+    <circle cx="725" cy="501" r="45"/>
+  </g>
+
+  <circle cx="512" cy="542" r="112" fill="#0F766E"/>
+  <path fill="#F8FAFC" d="M486 462h52v54h54v52h-54v54h-52v-54h-54v-52h54v-54Z"/>
+</svg>

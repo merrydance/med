@@ -100,6 +100,34 @@ describe('App settings controls', () => {
     expect(api.saveSettings).toHaveBeenCalled()
   })
 
+  it('opens an about page below settings with beta guidance, risks, references and credits', async () => {
+    render(<App />)
+
+    const settingsButton = await screen.findByRole('button', { name: '设置' })
+    const aboutButton = screen.getByRole('button', { name: '关于' })
+    expect(settingsButton.compareDocumentPosition(aboutButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(aboutButton)
+
+    expect(screen.getByText('关于神外医生AI助手')).toBeTruthy()
+    expect(screen.getByText('测试版说明')).toBeTruthy()
+    expect(screen.getByText(/当前是测试版/)).toBeTruthy()
+    expect(screen.getByText(/用于神经外科科研与临床辅助场景/)).toBeTruthy()
+    expect(screen.getByText(/上传 PDF/)).toBeTruthy()
+    expect(screen.queryByText(/本地片段检索/)).toBeNull()
+    expect(screen.getByText(/长文档会自动选取最相关的内容/)).toBeTruthy()
+    expect(screen.queryByText(/引用文献时应尽量/)).toBeNull()
+    expect(screen.getByText(/系统会尽量在回答中提供 PMID、PubMed 链接和 DOI/)).toBeTruthy()
+    expect(screen.getByText(/可能存在幻觉/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /WHO LMM 医疗 AI 治理指导/ }).getAttribute('href')).toBe('https://www.who.int/news/item/18-01-2024-who-releases-ai-ethics-and-governance-guidance-for-large-multi-modal-models')
+    expect(screen.getByRole('link', { name: /PubMed Help/ }).getAttribute('href')).toBe('https://pubmed.ncbi.nlm.nih.gov/help/')
+    expect(screen.getByRole('link', { name: /NCBI E-utilities/ }).getAttribute('href')).toBe('https://www.ncbi.nlm.nih.gov/books/NBK25499/')
+    expect(screen.getByRole('link', { name: 'MeSH 医学主题词体系' }).getAttribute('href')).toBe('https://www.ncbi.nlm.nih.gov/mesh')
+    expect(screen.getByText(/React/)).toBeTruthy()
+    expect(screen.getByText(/Electron/)).toBeTruthy()
+    expect(screen.getByText(/better-sqlite3/)).toBeTruthy()
+  })
+
   it('shows the current theme in the sidebar footer and saves the next value when clicked', async () => {
     const api = mockElectronApi()
     render(<App />)
@@ -111,6 +139,41 @@ describe('App settings controls', () => {
     })
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(screen.getByRole('button', { name: '浅色模式' })).toBeTruthy()
+  })
+
+  it('renders custom window controls and forwards clicks to Electron', async () => {
+    const api = mockElectronApi()
+    const minimizeWindow = vi.fn().mockResolvedValue(undefined)
+    const toggleMaximizeWindow = vi.fn().mockResolvedValue(undefined)
+    const closeWindow = vi.fn().mockResolvedValue(undefined)
+    Object.assign(api, { minimizeWindow, toggleMaximizeWindow, closeWindow })
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '最小化窗口' }))
+    fireEvent.click(screen.getByRole('button', { name: '最大化或还原窗口' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭窗口' }))
+
+    expect(minimizeWindow).toHaveBeenCalledTimes(1)
+    expect(toggleMaximizeWindow).toHaveBeenCalledTimes(1)
+    expect(closeWindow).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the new product name in the main chrome', async () => {
+    render(<App />)
+
+    expect(await screen.findAllByText('神外医生AI助手')).toHaveLength(2)
+  })
+
+  it('does not show a redundant empty-chat placeholder', async () => {
+    useChatStore.setState({
+      currentChatId: 'chat-1',
+      currentMessages: [],
+    })
+
+    render(<App />)
+
+    await screen.findByText('文档分析')
+    expect(screen.queryByText('开始对话...')).toBeNull()
   })
 
   it('starts a new chat from the welcome composer using selected model options', async () => {
@@ -131,6 +194,47 @@ describe('App settings controls', () => {
       }))
       expect(api.chat).toHaveBeenCalled()
     })
+  })
+
+  it('keeps the medical guardrail prompt as a system message', async () => {
+    const chat = vi.fn()
+    mockElectronApi({ chat })
+    render(<App />)
+
+    fireEvent.change(await screen.findByPlaceholderText('输入您的科研问题...'), { target: { value: '垂体腺瘤术后尿崩症处理' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled()
+    })
+    const [{ messages }] = chat.mock.calls[0]
+    expect(messages[0].role).toBe('system')
+    expect(messages[0].content).toContain('不得编造 PMID')
+    expect(messages[0].content).toContain('未检索到足够证据')
+    expect(messages[0].content).toContain('回答结构')
+    expect(messages[0].content).toContain('证据依据')
+    expect(messages[0].content).toContain('可追踪引用')
+    expect(messages[0].content).toContain('不得把模型背景知识包装成检索证据')
+  })
+
+  it('shows Chinese PubMed query guidance when searching from a Chinese question', async () => {
+    const api = mockElectronApi({
+      searchTavily: vi.fn().mockResolvedValue('\n\n【PubMed 检索说明】\n检测到中文输入，已使用内置检索提示词生成 PubMed 检索式。'),
+    })
+    useChatStore.setState({
+      currentChatId: 'chat-1',
+      currentMessages: [],
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('联网搜索'))
+    fireEvent.change(screen.getByPlaceholderText('输入您的科研问题...'), { target: { value: '胶质母细胞瘤复发治疗进展' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/PubMed 对英文检索词和 MeSH\/ATM 更友好/)).toBeTruthy()
+    })
+    expect(api.searchTavily).toHaveBeenCalledWith('胶质母细胞瘤复发治疗进展')
   })
 
   it('shows clear document parsing status while uploading a file', async () => {

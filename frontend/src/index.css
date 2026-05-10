@@ -218,8 +218,72 @@ body {
 
 .app-layout {
   display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
+  overflow: hidden;
+}
+
+.window-titlebar {
+  height: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-title {
+  min-width: 0;
+  padding-left: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.window-titlebar-controls {
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  width: 46px;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.window-control:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.window-control.close:hover {
+  background: var(--color-danger);
+  color: #FFFFFF;
+}
+
+.app-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
   overflow: hidden;
 }
 
@@ -230,7 +294,7 @@ body {
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   transition: background-color var(--transition);
 }
 
@@ -347,7 +411,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: var(--color-bg-secondary);
   transition: background-color var(--transition);
   position: relative;
@@ -833,6 +897,69 @@ body {
   margin: 0 0 1rem 0;
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.about-overlay {
+  width: 560px;
+  max-width: min(560px, calc(100vw - 2rem));
+}
+
+.about-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.about-close-btn {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.about-section {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.about-section h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  color: var(--color-text-primary);
+}
+
+.about-section p {
+  margin: 0.35rem 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.about-section ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.about-section a {
+  color: var(--color-accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.about-section a:hover {
+  text-decoration: underline;
+}
+
+.about-credit-list {
+  overflow-wrap: anywhere;
 }
 
 .settings-group {

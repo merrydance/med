@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { useSettingStore } from '../store/settingStore'
 import { MarkdownViewer } from './MarkdownViewer'
+import { APP_TITLE } from '../constants/app'
 import type { ChatMessage } from '../types/chat'
 import type { DocumentParseMode, FileReadResult } from '../types/env'
 
@@ -156,14 +157,27 @@ export function ChatArea() {
   // ====== 发送 ======
 
   const buildSystemPrompt = () => {
-    if (!enableNeuro) return '你是一位专业的 AI 科研助手。请用严谨、清晰、可追溯的方式回答。'
+    const baseRules = `你是严谨的医学科研 AI 助手。必须以真实、可追溯、保守的医学证据为边界。
+硬性规则：
+- 不得编造 PMID、DOI、指南名称、临床试验名称、样本量、P 值、HR、OR、RR、药物剂量、适应证、禁忌证或统计结论。
+- 引用 PubMed 文献时必须给出 PMID 和 PubMed 链接；有 DOI 时附 DOI 链接。引用指南时必须给出发布机构、年份和原始链接。
+- 若检索结果或上传文档中没有足够依据，必须明确说“未检索到足够证据”或“当前材料不足以支持该结论”，不得用模型记忆补造来源。
+- 区分“检索证据”“上传文档证据”“模型背景知识”和“推断”。推断必须标注为推断。
+- 不得把模型背景知识包装成检索证据或上传文档证据；没有出现在检索结果或上传文档中的来源，不能作为可追踪引用列出。
+- 医疗建议仅作科研和临床决策辅助，不能替代医生判断；涉及诊疗需说明适用前提、风险、禁忌和不确定性。
+- 默认使用中文，结构清晰，必要时使用表格。
+回答结构：
+1. 简要结论：先给出直接回答，并标明证据是否充分。
+2. 证据依据：按“检索证据 / 上传文档证据 / 模型背景知识 / 推断”分层说明。
+3. 临床边界：涉及诊疗、用药、手术策略或指南推荐时，列出适用前提、主要风险和不确定性。
+4. 可追踪引用：回答末尾列出真实 PMID、PubMed 链接、DOI 或指南原文链接；没有可追踪来源时明确说明。`
 
-    return `你是一位资深神经外科科研顾问，熟悉脑肿瘤、脑血管病、功能神经外科、神经重症、医学统计与论文写作。
-回答要求：
-- 优先给出可执行的科研和临床思路，但不要替代医生临床判断。
-- 涉及诊疗建议时说明证据等级、适用前提和不确定性。
-- 涉及文献时尽量指出来源类型、研究设计、样本量和局限性。
-- 默认使用中文，结构清晰，必要时使用表格。`
+    if (!enableNeuro) return baseRules
+
+    return `${baseRules}
+专业角色：
+- 你是一位资深神经外科科研顾问，熟悉脑肿瘤、脑血管病、功能神经外科、神经重症、医学统计与论文写作。
+- 优先采用 PubMed、指南、临床试验和高质量综述；网络搜索结果只能作为补充线索。`
   }
 
   const buildUserContent = async (text: string) => {
@@ -206,6 +220,9 @@ export function ChatArea() {
     if (!enableSearch || !query.trim() || !window.electronAPI) return ''
 
     const sourceLabel = tavilyKey ? 'PubMed + 网络' : 'PubMed'
+    if (/[\u3400-\u9fff]/.test(query)) {
+      appendAssistantStream('PubMed 对英文检索词和 MeSH/ATM 更友好；已将中文问题交给检索模块生成辅助检索式，结果仍需结合原文核验。\n\n')
+    }
     appendAssistantStream(`正在搜索 ${sourceLabel}...\n\n`)
 
     const context = await window.electronAPI.searchTavily(query)
@@ -215,7 +232,7 @@ export function ChatArea() {
     }
 
     appendAssistantStream('搜索完成，正在结合检索结果分析...\n\n')
-    return `\n\n=== 实时检索结果 ===\n请优先结合以下最新检索结果回答，并在回答中说明信息来源：\n${context}`
+    return `\n\n=== 实时检索结果 ===\n请优先结合以下最新检索结果回答，并在回答末尾列出真实引用链接。若结果不足，请明确说明未检索到足够证据，不能编造引用：\n${context}`
   }
 
   const getFileNameFromPath = (filePath: string) => {
@@ -367,10 +384,7 @@ export function ChatArea() {
           role: 'user' as const,
           content: userMsg.content + searchContext
         }
-      ].map(m => ({
-        role: m.role === 'system' ? 'assistant' : m.role,
-        content: m.content
-      }))
+      ]
       await window.electronAPI.chat({ messages: messagesPayload, settings: settingsForChat })
     } else {
       setIsPreparing(false)
@@ -529,7 +543,7 @@ export function ChatArea() {
     return (
       <div className="chat-area">
         <div className="welcome-composer">
-          <div className="welcome-kicker">神经外科 AI 科研助手</div>
+          <div className="welcome-kicker">{APP_TITLE}</div>
           <div className="welcome-title">从哪个问题开始？</div>
           {renderComposer('welcome')}
         </div>
@@ -567,11 +581,6 @@ export function ChatArea() {
       </div>
 
       <div className="chat-messages" ref={messagesRef}>
-        {currentMessages.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginTop: '4rem' }}>
-            开始对话...
-          </div>
-        )}
         {currentMessages.map(msg => (
           <div key={msg.id} className={`chat-bubble ${msg.role}`}>
             {msg.role === 'assistant' ? (

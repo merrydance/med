@@ -12,7 +12,7 @@ const {
 } = require('./src-main/api.js');
 const { buildDocumentContext } = require('./src-main/rag.js');
 
-const APP_TITLE = '神经外科 AI 科研助手';
+const APP_TITLE = '神外医生AI助手';
 
 // Linux 下 NSS 证书兼容 (Windows 无需此项)
 if (process.platform === 'linux') {
@@ -37,8 +37,8 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: APP_TITLE,
-    icon: path.join(__dirname, 'icon.png'),
-    frame: true,
+    icon: path.join(__dirname, 'assets', 'icon.png'),
+    frame: false,
     resizable: true,
     minimizable: true,
     maximizable: true,
@@ -93,6 +93,28 @@ ipcMain.handle('settings:save', (_, settings) => {
     console.error('保存设置失败:', err);
     return false;
   }
+});
+
+function getWindowFromEvent(event) {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+ipcMain.handle('window:minimize', (event) => {
+  getWindowFromEvent(event)?.minimize();
+});
+
+ipcMain.handle('window:toggleMaximize', (event) => {
+  const win = getWindowFromEvent(event);
+  if (!win) return;
+  if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+});
+
+ipcMain.handle('window:close', (event) => {
+  getWindowFromEvent(event)?.close();
 });
 
 // ====== SQLite CRUD (Task 3.1.3) ======

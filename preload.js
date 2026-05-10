@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSettings: (s) => ipcRenderer.invoke('settings:save', s),
   testConnection: () => ipcRenderer.invoke('settings:testConnection'),
 
+  // 窗口控制
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggleMaximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+
   // 文件系统
   openFileDialog: () => ipcRenderer.invoke('file:dialog'),
   openFileDialogs: () => ipcRenderer.invoke('file:dialogs'),

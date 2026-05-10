@@ -4,11 +4,13 @@ import { useChatStore } from '../store/chatStore'
 interface SidebarProps {
   themeLabel: string
   showSettings: boolean
+  showAbout: boolean
   onToggleTheme: () => void
   onToggleSettings: () => void
+  onToggleAbout: () => void
 }
 
-export function Sidebar({ themeLabel, showSettings, onToggleTheme, onToggleSettings }: SidebarProps) {
+export function Sidebar({ themeLabel, showSettings, showAbout, onToggleTheme, onToggleSettings, onToggleAbout }: SidebarProps) {
   const { chats, currentChatId, isLoaded, loadChats, switchChat, createNewChat, deleteChat } = useChatStore()
 
   useEffect(() => {
@@ -56,6 +58,9 @@ export function Sidebar({ themeLabel, showSettings, onToggleTheme, onToggleSetti
         </button>
         <button className="sidebar-footer-btn primary" onClick={onToggleSettings}>
           {showSettings ? '关闭设置' : '设置'}
+        </button>
+        <button className="sidebar-footer-btn" onClick={onToggleAbout}>
+          {showAbout ? '关闭关于' : '关于'}
         </button>
       </div>
     </div>
