@@ -20,6 +20,7 @@ const MODEL_OPTIONS = [
 
 const SEARCH_CONTEXT_MESSAGE_LIMIT = 4
 const SEARCH_CONTEXT_MAX_CHARS = 360
+const STREAM_FLUSH_INTERVAL_MS = 50
 
 type FileQueueItem = {
   id: string
@@ -60,6 +61,32 @@ export function ChatArea() {
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const streamingChatIdRef = useRef<string | null>(null)
+  const streamBufferRef = useRef('')
+  const streamFlushTimerRef = useRef<number | null>(null)
+  const streamBufferChatIdRef = useRef<string | null>(null)
+
+  const flushStreamBuffer = useCallback(() => {
+    const content = streamBufferRef.current
+    const chatId = streamBufferChatIdRef.current || streamingChatIdRef.current || undefined
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current)
+      streamFlushTimerRef.current = null
+    }
+    if (!content) return
+    streamBufferRef.current = ''
+    streamBufferChatIdRef.current = null
+    appendAssistantStream(content, chatId)
+  }, [appendAssistantStream])
+
+  const appendBufferedAssistantStream = useCallback((chunk: string, chatId?: string) => {
+    streamBufferRef.current += chunk
+    streamBufferChatIdRef.current = chatId || streamingChatIdRef.current
+    if (streamFlushTimerRef.current !== null) return
+
+    streamFlushTimerRef.current = window.setTimeout(() => {
+      flushStreamBuffer()
+    }, STREAM_FLUSH_INTERVAL_MS)
+  }, [flushStreamBuffer])
 
   const appendToAssistantBubble = useCallback((content: string, chatId?: string) => {
     const { currentChatId: latestChatId, currentMessages: latestMessages, chats } = useChatStore.getState()
@@ -149,23 +176,28 @@ export function ChatArea() {
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI.onChatDelta((chunk) => {
-        appendAssistantStream(chunk, streamingChatIdRef.current || undefined)
+        appendBufferedAssistantStream(chunk, streamingChatIdRef.current || undefined)
       })
       window.electronAPI.onChatComplete(async () => {
         const targetChatId = streamingChatIdRef.current || undefined
+        flushStreamBuffer()
         await finalizeStream(targetChatId)
         streamingChatIdRef.current = null
         setStreaming(false)
       })
       window.electronAPI.onChatError((errMsg) => {
         const targetChatId = streamingChatIdRef.current || undefined
+        flushStreamBuffer()
         streamingChatIdRef.current = null
         setStreaming(false)
         setIsPreparing(false)
         appendToAssistantBubble(`\n\n错误: ${errMsg}`, targetChatId)
       })
     }
-  }, [appendAssistantStream, finalizeStream, setStreaming, appendToAssistantBubble])
+    return () => {
+      flushStreamBuffer()
+    }
+  }, [appendBufferedAssistantStream, finalizeStream, setStreaming, appendToAssistantBubble, flushStreamBuffer])
 
   // ====== 发送 ======
 

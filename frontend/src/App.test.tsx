@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { DEFAULT_REASONING_EFFORT, useChatStore } from './store/chatStore'
@@ -397,6 +397,42 @@ describe('App settings controls', () => {
 
     fireEvent.click(screen.getByText('胶质母细胞瘤复发治疗进展'))
     expect(await screen.findByText('生成内容')).toBeTruthy()
+  })
+
+  it('batches tiny streaming deltas before rendering to keep long answers responsive', async () => {
+    let deltaHandler: ((chunk: string) => void) | undefined
+    const api = mockElectronApi({
+      onChatDelta: vi.fn((handler) => {
+        deltaHandler = handler
+      }),
+      chat: vi.fn().mockResolvedValue(undefined),
+    })
+    render(<App />)
+
+    fireEvent.change(await screen.findByPlaceholderText('输入您的科研问题...'), { target: { value: '请解释岛叶胶质瘤手术入路' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(api.chat).toHaveBeenCalled()
+    })
+
+    vi.useFakeTimers()
+    try {
+      deltaHandler?.('神')
+      deltaHandler?.('经')
+      deltaHandler?.('外')
+
+      expect(useChatStore.getState().currentMessages.at(-1)?.content).toBe('')
+
+      await act(async () => {
+        vi.advanceTimersByTime(60)
+      })
+
+      expect(useChatStore.getState().currentMessages.at(-1)?.content).toBe('神经外')
+      expect(screen.getByText('神经外')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows Chinese PubMed query guidance when searching from a Chinese question', async () => {
