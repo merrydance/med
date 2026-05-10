@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件系统
   openFileDialog: () => ipcRenderer.invoke('file:dialog'),
   openFileDialogs: () => ipcRenderer.invoke('file:dialogs'),
-  readFile: (p) => ipcRenderer.invoke('file:read', p),
+  readFile: (p, options) => ipcRenderer.invoke('file:read', p, options),
   selectDocumentContext: (payload) => ipcRenderer.invoke('rag:selectContext', payload),
 
   // 数据库 CRUD (Task 3.1.3)

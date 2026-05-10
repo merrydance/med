@@ -130,9 +130,9 @@ ipcMain.handle('db:deleteChat', (_, chatId) => {
 });
 
 // 读取文件
-ipcMain.handle('file:read', async (_, filePath) => {
+ipcMain.handle('file:read', async (_, filePath, options = {}) => {
   try {
-    return await parseDocument(filePath);
+    return await parseDocument(filePath, { mode: options.mode });
   } catch (err) {
     throw new Error(`文件读取失败: ${err.message}`);
   }

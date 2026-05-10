@@ -20,6 +20,8 @@ export interface FileReadResult {
   warnings?: string[];
 }
 
+export type DocumentParseMode = 'fast' | 'advanced';
+
 export interface DocumentContextChunk {
   index: number;
   text: string;
@@ -74,7 +76,7 @@ export interface ElectronAPI {
   
   openFileDialog: () => Promise<string | null>;
   openFileDialogs?: () => Promise<string[]>;
-  readFile: (path: string) => Promise<FileReadResult>;
+  readFile: (path: string, options?: { mode?: DocumentParseMode }) => Promise<FileReadResult>;
   selectDocumentContext: (payload: {
     name: string;
     text: string;

@@ -176,18 +176,19 @@
 
 > **试用版策略**：阶段五暂不进入当前医生内部试用版，作为下一版增强项推进。当前试用版先覆盖基础聊天、文档纯文本分析、可信来源搜索、SQLite 历史会话和连接诊断。
 
-### [Task-5.1.1] 废弃 pdf-parse 与高级解析引擎集成
+### [Task-5.1.1] 默认快速 PDF 解析与可选高级解析引擎集成
 - **Assignee**: Codex
 - **涉及范围**: `main.js`, `src-main/documentParser.js`, `frontend/src/components/ChatArea.tsx`
 - **Action**:
   1. [ ] 卸载 `pdf-parse`。（当前保留为兼容回退，避免医生电脑未安装 Docling 时上传功能不可用）
-  2. [x] 接入新的解析引擎：优先调用本机 `docling` CLI 生成 Markdown，失败/超时自动回退到 `pdf-parse`。
+  2. [x] 接入新的解析引擎：默认使用 `pdf-parse` 快速兼容解析；用户开启“高级PDF解析”时再调用本机 `docling` CLI 生成 Markdown，失败/超时自动回退到 `pdf-parse`。
   3. [x] 解析返回包含 Markdown、纯文本、解析器来源、回退来源和用户可读警告。
-  4. [x] 前端上传时显示明确的解析中、自动回退、解析完成和发送前检索状态，避免用户误以为死机或无效。
+  4. [x] 前端上传时显示明确的解析模式、解析中、自动回退、解析完成和发送前检索状态，避免用户误以为死机或无效。
 - **DoD**:
   - [x] 已补充自动化测试覆盖 Docling Markdown 表格文本保留、Docling 不可用时回退、双解析失败报错和前端解析等待态。
   - [x] 已安装 Docling 并使用 3 个开放获取 GBM 医学 PDF 进行真实评测，结果记录在 `docs/evaluation/2026-05-10-docling-pdf-evaluation.md`。
-  - [ ] 真实评测中 Docling 均 120 秒超时并回退，尚未验证表格 Markdown 质量；默认超时已收紧到 30 秒，后续需在更强机器/暖缓存下复测。
+  - [x] 真实评测中 Docling 均 120 秒超时并回退，结论是不能作为默认交互式上传路径；已改为用户显式开启的高级尝试，默认快速兼容解析。
+  - [ ] 尚未验证 Docling 表格 Markdown 质量；后续需在更强机器/暖缓存下复测。
 
 ### [Task-5.2.1] 本地轻量化 RAG (文本切块与检索)
 - **Assignee**: Codex

@@ -3,7 +3,7 @@ import { useChatStore } from '../store/chatStore'
 import { useSettingStore } from '../store/settingStore'
 import { MarkdownViewer } from './MarkdownViewer'
 import type { ChatMessage } from '../types/chat'
-import type { FileReadResult } from '../types/env'
+import type { DocumentParseMode, FileReadResult } from '../types/env'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-5.5', label: 'GPT-5.5' },
@@ -46,6 +46,7 @@ export function ChatArea() {
   const [enableDoc, setEnableDoc] = useState(true)
   const [enableSearch, setEnableSearch] = useState(false)
   const [enableNeuro, setEnableNeuro] = useState(true)
+  const [enableAdvancedParse, setEnableAdvancedParse] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
   const [isParsingFile, setIsParsingFile] = useState(false)
   const [fileStatus, setFileStatus] = useState('')
@@ -229,6 +230,13 @@ export function ChatArea() {
     return '文档已读取'
   }
 
+  const getParseStatusHint = () => {
+    if (enableAdvancedParse) {
+      return '高级解析尝试已开启，可能需要更久；如果本机未安装 Docling、超时或失败，会自动切换到兼容解析。'
+    }
+    return '正在使用快速兼容解析读取 PDF/TXT/MD，通常几秒内完成。'
+  }
+
   const handleUpload = async () => {
     if (!window.electronAPI || isStreaming || isParsingFile) return
 
@@ -245,7 +253,8 @@ export function ChatArea() {
       if (!filePaths.length) return
 
       setIsParsingFile(true)
-      setFileStatus('正在读取文档，请稍候...')
+      const parseMode: DocumentParseMode = enableAdvancedParse ? 'advanced' : 'fast'
+      setFileStatus(getParseStatusHint())
 
       const initialQueue = filePaths.map((filePath, index) => ({
         id: `${Date.now()}-${index}`,
@@ -261,7 +270,7 @@ export function ChatArea() {
         )))
 
         try {
-          const file = await window.electronAPI.readFile(item.path)
+          const file = await window.electronAPI.readFile(item.path, { mode: parseMode })
           setPendingFile(file)
           setEnableDoc(true)
           setFileQueue((queue) => queue.map((queued) => (
@@ -412,7 +421,7 @@ export function ChatArea() {
           <div className="file-preview-main">
             <span className="file-preview-name">正在解析文档</span>
             <span className="file-preview-status">
-              PDF 会优先尝试本地 Docling 高级解析；如果本机未安装或耗时过长，会自动切换到兼容解析。
+              {getParseStatusHint()}
             </span>
           </div>
         </div>
@@ -500,6 +509,17 @@ export function ChatArea() {
               <option value="xhigh">XHigh</option>
             </select>
           </label>
+          <label className={`composer-parse-toggle ${enableAdvancedParse ? 'active' : ''}`}>
+            <input
+              type="checkbox"
+              checked={enableAdvancedParse}
+              onChange={(e) => setEnableAdvancedParse(e.target.checked)}
+            />
+            高级PDF解析
+          </label>
+          <span className="composer-parse-hint">
+            {enableAdvancedParse ? '高级解析尝试已开启，上传慢时会自动回退。' : '默认快速解析，适合日常上传。'}
+          </span>
         </div>
       </div>
     </>

@@ -134,13 +134,7 @@ describe('App settings controls', () => {
   })
 
   it('shows clear document parsing status while uploading a file', async () => {
-    let resolveFile: (value: {
-      name: string
-      text: string
-      pages: number
-      provider: 'docling'
-      warnings: string[]
-    }) => void
+    let resolveFile: (value: Awaited<ReturnType<ElectronAPI['readFile']>>) => void
     const api = mockElectronApi({
       openFileDialog: vi.fn().mockResolvedValue('/tmp/paper.pdf'),
       readFile: vi.fn().mockImplementation(() => new Promise((resolve) => {
@@ -152,21 +146,21 @@ describe('App settings controls', () => {
     fireEvent.click(await screen.findByRole('button', { name: '上传文档' }))
 
     expect(await screen.findByText('正在解析文档')).toBeTruthy()
-    expect(screen.getByText(/PDF 会优先尝试本地 Docling 高级解析/)).toBeTruthy()
+    expect(screen.getByText(/正在使用快速兼容解析读取/)).toBeTruthy()
 
     resolveFile!({
       name: 'paper.pdf',
       text: '胶质母细胞瘤研究',
       pages: 12,
-      provider: 'docling',
+      provider: 'pdf-parse',
       warnings: [],
     })
 
     await waitFor(() => {
-      expect(screen.getByText('高级解析完成，已保留更完整的段落和表格文本。')).toBeTruthy()
+      expect(screen.getByText('兼容解析完成')).toBeTruthy()
     })
     expect(screen.getByText('paper.pdf')).toBeTruthy()
-    expect(api.readFile).toHaveBeenCalledWith('/tmp/paper.pdf')
+    expect(api.readFile).toHaveBeenCalledWith('/tmp/paper.pdf', { mode: 'fast' })
   })
 
   it('queues multiple selected documents and shows per-file parse status', async () => {
@@ -201,5 +195,28 @@ describe('App settings controls', () => {
     expect(screen.getByText('高级解析完成')).toBeTruthy()
     expect(screen.getByText('未检测到 Docling，已自动使用兼容解析。')).toBeTruthy()
     expect(api.readFile).toHaveBeenCalledTimes(2)
+    expect(api.readFile).toHaveBeenNthCalledWith(1, '/tmp/a.pdf', { mode: 'fast' })
+  })
+
+  it('can opt into advanced PDF parsing for the next upload', async () => {
+    const api = mockElectronApi({
+      openFileDialogs: vi.fn().mockResolvedValue(['/tmp/advanced.pdf']),
+      readFile: vi.fn().mockResolvedValue({
+        name: 'advanced.pdf',
+        text: '高级解析文本',
+        pages: 1,
+        provider: 'docling',
+        warnings: [],
+      }),
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByLabelText('高级PDF解析'))
+    fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
+
+    await waitFor(() => {
+      expect(api.readFile).toHaveBeenCalledWith('/tmp/advanced.pdf', { mode: 'advanced' })
+    })
+    expect(screen.getByText(/高级解析尝试已开启/)).toBeTruthy()
   })
 })

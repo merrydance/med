@@ -753,6 +753,43 @@ body {
   outline: none;
 }
 
+.composer-parse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 30px;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
+}
+
+.composer-parse-toggle.active {
+  border-color: var(--color-accent);
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.composer-parse-toggle input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.composer-parse-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .chat-send-btn {
   min-height: 38px;
   padding: 0 1.2rem;

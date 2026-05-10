@@ -27,6 +27,7 @@ test('strips markdown while preserving table cell text for retrieval', () => {
 
 test('uses Docling markdown output for PDFs when available', async () => {
   const result = await parseDocument('/tmp/paper.pdf', {
+    mode: 'advanced',
     runDocling: async (filePath) => {
       assert.equal(filePath, '/tmp/paper.pdf');
       return '# 标题\n\n| 指标 | 数值 |\n|---|---:|\n| PFS | 12 |';
@@ -44,8 +45,27 @@ test('uses Docling markdown output for PDFs when available', async () => {
   assert.deepEqual(result.warnings, []);
 });
 
+test('uses fast pdf-parse mode by default without invoking Docling', async () => {
+  const result = await parseDocument('/tmp/fast.pdf', {
+    runDocling: async () => {
+      throw new Error('docling should not run');
+    },
+    readFile: () => Buffer.from('pdf bytes'),
+    pdfParse: async () => ({
+      text: '快速解析文本',
+      numpages: 5
+    })
+  });
+
+  assert.equal(result.provider, 'pdf-parse');
+  assert.equal(result.fallbackFrom, null);
+  assert.equal(result.text, '快速解析文本');
+  assert.deepEqual(result.warnings, []);
+});
+
 test('falls back to pdf-parse when Docling is unavailable', async () => {
   const result = await parseDocument('/tmp/fallback.pdf', {
+    mode: 'advanced',
     runDocling: async () => {
       const error = new Error('spawn docling ENOENT');
       error.code = 'ENOENT';
@@ -68,6 +88,7 @@ test('falls back to pdf-parse when Docling is unavailable', async () => {
 test('reports both parser failures when PDF parsing cannot recover', async () => {
   await assert.rejects(
     parseDocument('/tmp/broken.pdf', {
+      mode: 'advanced',
       runDocling: async () => {
         throw new Error('docling failed');
       },

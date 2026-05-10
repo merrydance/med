@@ -103,11 +103,26 @@ async function runDoclingCli(filePath, options = {}) {
   }
 }
 
-async function parsePdfWithFallback(filePath, deps) {
-  const warnings = [];
-  const runDocling = deps.runDocling || runDoclingCli;
+async function parsePdfFast(filePath, deps, warnings = [], fallbackFrom = null) {
   const readFile = deps.readFile || fs.readFileSync;
   const pdfParse = deps.pdfParse || require('pdf-parse');
+  const buffer = readFile(filePath);
+  const data = await pdfParse(buffer);
+  const text = data.text || '';
+  return {
+    name: path.basename(filePath),
+    text,
+    markdown: '',
+    pages: data.numpages || 1,
+    provider: 'pdf-parse',
+    fallbackFrom,
+    warnings
+  };
+}
+
+async function parsePdfAdvanced(filePath, deps) {
+  const warnings = [];
+  const runDocling = deps.runDocling || runDoclingCli;
 
   try {
     const markdown = await runDocling(filePath);
@@ -125,18 +140,7 @@ async function parsePdfWithFallback(filePath, deps) {
     warnings.push(createDoclingUnavailableMessage(doclingError));
 
     try {
-      const buffer = readFile(filePath);
-      const data = await pdfParse(buffer);
-      const text = data.text || '';
-      return {
-        name: path.basename(filePath),
-        text,
-        markdown: '',
-        pages: data.numpages || 1,
-        provider: 'pdf-parse',
-        fallbackFrom: 'docling',
-        warnings
-      };
+      return await parsePdfFast(filePath, deps, warnings, 'docling');
     } catch (fallbackError) {
       throw new Error(`高级解析失败: ${doclingError.message}; 兼容解析也失败: ${fallbackError.message}`);
     }
@@ -147,7 +151,9 @@ async function parseDocument(filePath, deps = {}) {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.pdf') {
-    return parsePdfWithFallback(filePath, deps);
+    return deps.mode === 'advanced'
+      ? parsePdfAdvanced(filePath, deps)
+      : parsePdfFast(filePath, deps);
   }
 
   const readTextFile = deps.readTextFile || fs.readFileSync;
