@@ -922,6 +922,13 @@ body {
   font-size: 0.8rem;
 }
 
+.about-version {
+  margin-top: -0.55rem;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
 .about-section {
   padding: 0.75rem 0;
   border-top: 1px solid var(--color-border);

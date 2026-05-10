@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildPubMedQuery,
+  searchPubMed,
   formatSearchContext
 } = require('../../search.js');
 
@@ -85,4 +86,107 @@ test('formats PubMed citations with traceable query, PubMed links and DOI links'
   assert.match(context, /https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/12345678\//);
   assert.match(context, /https:\/\/doi\.org\/10\.1000\/test\.doi/);
   assert.match(context, /不得编造 PMID、DOI/);
+});
+
+test('fetches PubMed abstracts and publication types for stronger evidence context', async () => {
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    if (String(url).includes('esearch.fcgi')) {
+      return {
+        ok: true,
+        json: async () => ({ esearchresult: { idlist: ['12345678'] } })
+      };
+    }
+    if (String(url).includes('esummary.fcgi')) {
+      return {
+        ok: true,
+        json: async () => ({
+          result: {
+            '12345678': {
+              title: 'Treatment of recurrent glioblastoma.',
+              authors: [{ name: 'Smith J' }],
+              fulljournalname: 'Neuro Oncol',
+              pubdate: '2026',
+              articleids: [{ idtype: 'doi', value: '10.1000/test.doi' }]
+            }
+          }
+        })
+      };
+    }
+    if (String(url).includes('efetch.fcgi')) {
+      return {
+        ok: true,
+        text: async () => `<?xml version="1.0"?>
+          <PubmedArticleSet>
+            <PubmedArticle>
+              <MedlineCitation>
+                <PMID>12345678</PMID>
+                <Article>
+                  <Abstract>
+                    <AbstractText Label="BACKGROUND">Recurrent glioblastoma has limited evidence.</AbstractText>
+                    <AbstractText Label="RESULTS">Median survival improved in selected patients.</AbstractText>
+                  </Abstract>
+                  <PublicationTypeList>
+                    <PublicationType>Randomized Controlled Trial</PublicationType>
+                    <PublicationType>Clinical Trial</PublicationType>
+                  </PublicationTypeList>
+                </Article>
+              </MedlineCitation>
+            </PubmedArticle>
+          </PubmedArticleSet>`
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const pubmed = await searchPubMed('recurrent glioblastoma treatment', 1, { fetchImpl });
+
+  assert.equal(pubmed.results.length, 1);
+  assert.match(pubmed.results[0].abstract, /Recurrent glioblastoma/);
+  assert.deepEqual(pubmed.results[0].publicationTypes, ['Randomized Controlled Trial', 'Clinical Trial']);
+  assert.ok(requests.some((url) => url.includes('efetch.fcgi')));
+
+  const context = formatSearchContext(pubmed, null);
+  assert.match(context, /文献类型: Randomized Controlled Trial; Clinical Trial/);
+  assert.match(context, /摘要: BACKGROUND: Recurrent glioblastoma/);
+});
+
+test('keeps PubMed summary citations when abstract detail fetch fails', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes('esearch.fcgi')) {
+      return {
+        ok: true,
+        json: async () => ({ esearchresult: { idlist: ['12345678'] } })
+      };
+    }
+    if (String(url).includes('esummary.fcgi')) {
+      return {
+        ok: true,
+        json: async () => ({
+          result: {
+            '12345678': {
+              title: 'Treatment of recurrent glioblastoma.',
+              authors: [{ name: 'Smith J' }],
+              source: 'Neuro Oncol',
+              pubdate: '2026',
+              articleids: [{ idtype: 'doi', value: '10.1000/test.doi' }]
+            }
+          }
+        })
+      };
+    }
+    return {
+      ok: false,
+      status: 503,
+      text: async () => ''
+    };
+  };
+
+  const pubmed = await searchPubMed('recurrent glioblastoma treatment', 1, { fetchImpl });
+
+  assert.equal(pubmed.results.length, 1);
+  assert.equal(pubmed.results[0].pmid, '12345678');
+  assert.equal(pubmed.results[0].abstract, '');
+  assert.deepEqual(pubmed.results[0].publicationTypes, []);
 });

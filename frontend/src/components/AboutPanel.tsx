@@ -1,4 +1,4 @@
-import { APP_TITLE } from '../constants/app'
+import { APP_TITLE, APP_VERSION } from '../constants/app'
 
 interface AboutPanelProps {
   onClose?: () => void
@@ -43,7 +43,10 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
   return (
     <div className="settings-overlay about-overlay">
       <div className="about-header">
-        <h2 className="settings-title">关于{APP_TITLE}</h2>
+        <div>
+          <h2 className="settings-title">关于{APP_TITLE}</h2>
+          <div className="about-version">{APP_VERSION}</div>
+        </div>
         <button type="button" className="about-close-btn" onClick={onClose}>
           关闭
         </button>

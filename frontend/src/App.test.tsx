@@ -111,6 +111,7 @@ describe('App settings controls', () => {
 
     expect(screen.getByText('关于神外医生AI助手')).toBeTruthy()
     expect(screen.getByText('测试版说明')).toBeTruthy()
+    expect(screen.getByText('v0.1.0 Beta')).toBeTruthy()
     expect(screen.getByText(/当前是测试版/)).toBeTruthy()
     expect(screen.getByText(/用于神经外科科研与临床辅助场景/)).toBeTruthy()
     expect(screen.getByText(/上传 PDF/)).toBeTruthy()
@@ -211,7 +212,8 @@ describe('App settings controls', () => {
     expect(messages[0].role).toBe('system')
     expect(messages[0].content).toContain('不得编造 PMID')
     expect(messages[0].content).toContain('未检索到足够证据')
-    expect(messages[0].content).toContain('回答结构')
+    expect(messages[0].content).toContain('医学证据类回答结构')
+    expect(messages[0].content).toContain('写作、润色、翻译、头脑风暴或研究设计构思')
     expect(messages[0].content).toContain('证据依据')
     expect(messages[0].content).toContain('可追踪引用')
     expect(messages[0].content).toContain('不得把模型背景知识包装成检索证据')

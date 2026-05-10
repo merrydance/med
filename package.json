@@ -1,6 +1,6 @@
 {
   "name": "neuro-research-assistant",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "神外医生AI助手",
   "main": "main.js",
   "scripts": {

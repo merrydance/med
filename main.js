@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./src-main/db.js');
 const settingsStore = require('./src-main/settings.js');
 const { parseDocument } = require('./src-main/documentParser.js');
+const { createFileAccessGuard } = require('./src-main/fileAccess.js');
 const {
   normalizeChatBaseUrl,
   createChatRequestBody,
@@ -13,9 +14,19 @@ const {
 const { buildDocumentContext } = require('./src-main/rag.js');
 
 const APP_TITLE = '神外医生AI助手';
+const fileAccessGuard = createFileAccessGuard();
 
-// Linux 下 NSS 证书兼容 (Windows 无需此项)
-if (process.platform === 'linux') {
+function isDevMode() {
+  return process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+}
+
+function getSettingsCryptoOptions() {
+  return {
+    cryptoProvider: settingsStore.createSafeStorageProvider(safeStorage)
+  };
+}
+
+if (isDevMode() && process.env.YUNWU_ALLOW_INSECURE_TLS === '1') {
   app.commandLine.appendSwitch('ignore-certificate-errors');
 }
 
@@ -57,8 +68,7 @@ function createWindow() {
     win.setTitle(APP_TITLE);
   });
 
-  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
-  if (isDev) {
+  if (isDevMode()) {
     win.loadURL('http://localhost:5173');
     // win.webContents.openDevTools();
   } else {
@@ -83,12 +93,12 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 
 // 保存/读取设置
 ipcMain.handle('settings:get', () => {
-  return settingsStore.readSettings(app.getPath('userData'));
+  return settingsStore.readSettings(app.getPath('userData'), getSettingsCryptoOptions());
 });
 
 ipcMain.handle('settings:save', (_, settings) => {
   try {
-    return settingsStore.writeSettings(app.getPath('userData'), settings);
+    return settingsStore.writeSettings(app.getPath('userData'), settings, getSettingsCryptoOptions());
   } catch (err) {
     console.error('保存设置失败:', err);
     return false;
@@ -154,7 +164,8 @@ ipcMain.handle('db:deleteChat', (_, chatId) => {
 // 读取文件
 ipcMain.handle('file:read', async (_, filePath, options = {}) => {
   try {
-    return await parseDocument(filePath, { mode: options.mode });
+    const readablePath = fileAccessGuard.assertReadableSelectedFile(filePath);
+    return await parseDocument(readablePath, { mode: options.mode });
   } catch (err) {
     throw new Error(`文件读取失败: ${err.message}`);
   }
@@ -165,11 +176,11 @@ ipcMain.handle('file:dialog', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: '文档', extensions: ['pdf', 'txt', 'md', 'doc', 'docx'] },
-      { name: '所有文件', extensions: ['*'] },
+      { name: '文档', extensions: ['pdf', 'txt', 'md', 'markdown'] },
     ],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
+  fileAccessGuard.registerSelectedFiles(result.filePaths);
   return result.filePaths[0];
 });
 
@@ -177,11 +188,11 @@ ipcMain.handle('file:dialogs', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: '文档', extensions: ['pdf', 'txt', 'md', 'doc', 'docx'] },
-      { name: '所有文件', extensions: ['*'] },
+      { name: '文档', extensions: ['pdf', 'txt', 'md', 'markdown'] },
     ],
   });
   if (result.canceled || result.filePaths.length === 0) return [];
+  fileAccessGuard.registerSelectedFiles(result.filePaths);
   return result.filePaths;
 });
 
@@ -195,7 +206,7 @@ ipcMain.handle('rag:selectContext', (_, payload) => {
 
 // 大模型对话请求 (Task 2.1.2)
 function getSettingsSync() {
-  const settings = settingsStore.readSettings(app.getPath('userData'));
+  const settings = settingsStore.readSettings(app.getPath('userData'), getSettingsCryptoOptions());
   return {
     ...settings,
     baseUrl: settings.baseUrl || 'https://api.openai.com/v1'

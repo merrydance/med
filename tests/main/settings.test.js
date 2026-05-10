@@ -49,3 +49,59 @@ test('writes settings atomically with normalized string fields', () => {
     theme: 'dark'
   });
 });
+
+test('protects API keys at rest while returning plaintext settings to the app', () => {
+  const userDataPath = withTempUserData();
+  const settingsFile = path.join(userDataPath, 'data', 'settings.json');
+
+  assert.equal(writeSettings(userDataPath, {
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-live-secret',
+    tavilyKey: 'tvly-live-secret',
+    model: 'gpt-5.5',
+    theme: 'system'
+  }), true);
+
+  const rawSettings = fs.readFileSync(settingsFile, 'utf-8');
+  assert.doesNotMatch(rawSettings, /sk-live-secret/);
+  assert.doesNotMatch(rawSettings, /tvly-live-secret/);
+  assert.match(rawSettings, /protected/);
+
+  assert.deepEqual(readSettings(userDataPath), {
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-live-secret',
+    tavilyKey: 'tvly-live-secret',
+    model: 'gpt-5.5',
+    customModel: '',
+    reasoningEffort: '',
+    theme: 'system'
+  });
+});
+
+test('reads legacy plaintext API keys so existing installations can migrate on next save', () => {
+  const userDataPath = withTempUserData();
+  const settingsFile = path.join(userDataPath, 'data', 'settings.json');
+
+  fs.writeFileSync(settingsFile, JSON.stringify({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'legacy-api-key',
+    tavilyKey: 'legacy-tavily-key',
+    model: 'gpt-4o',
+    theme: 'dark'
+  }, null, 2));
+
+  assert.deepEqual(readSettings(userDataPath), {
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'legacy-api-key',
+    tavilyKey: 'legacy-tavily-key',
+    model: 'gpt-4o',
+    customModel: '',
+    reasoningEffort: '',
+    theme: 'dark'
+  });
+
+  assert.equal(writeSettings(userDataPath, readSettings(userDataPath)), true);
+  const rawSettings = fs.readFileSync(settingsFile, 'utf-8');
+  assert.doesNotMatch(rawSettings, /legacy-api-key/);
+  assert.doesNotMatch(rawSettings, /legacy-tavily-key/);
+});

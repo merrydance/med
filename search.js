@@ -202,31 +202,119 @@ function buildPubMedQuery(query) {
   };
 }
 
+function decodeXmlEntities(text) {
+  return String(text || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function cleanXmlText(text) {
+  return decodeXmlEntities(text)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getAttr(attrs, name) {
+  const match = String(attrs || '').match(new RegExp(`\\b${name}="([^"]*)"`, 'i'));
+  return match ? decodeXmlEntities(match[1]).trim() : '';
+}
+
+function extractTagContents(xml, tagName) {
+  const contents = [];
+  const regex = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'gi');
+  let match;
+  while ((match = regex.exec(xml)) !== null) {
+    const text = cleanXmlText(match[1]);
+    if (text) contents.push(text);
+  }
+  return contents;
+}
+
+function parsePubMedDetailsXml(xml) {
+  const details = {};
+  const articleRegex = /<PubmedArticle\b[\s\S]*?<\/PubmedArticle>/gi;
+  let articleMatch;
+
+  while ((articleMatch = articleRegex.exec(String(xml || ''))) !== null) {
+    const articleXml = articleMatch[0];
+    const pmid = extractTagContents(articleXml, 'PMID')[0];
+    if (!pmid) continue;
+
+    const abstractParts = [];
+    const abstractRegex = /<AbstractText\b([^>]*)>([\s\S]*?)<\/AbstractText>/gi;
+    let abstractMatch;
+    while ((abstractMatch = abstractRegex.exec(articleXml)) !== null) {
+      const label = getAttr(abstractMatch[1], 'Label');
+      const text = cleanXmlText(abstractMatch[2]);
+      if (!text) continue;
+      abstractParts.push(label ? `${label}: ${text}` : text);
+    }
+
+    details[pmid] = {
+      abstract: abstractParts.join(' '),
+      publicationTypes: Array.from(new Set(extractTagContents(articleXml, 'PublicationType')))
+    };
+  }
+
+  return details;
+}
+
+async function fetchPubMedDetails(ids, { fetchImpl = fetch, signal } = {}) {
+  if (!ids?.length) return {};
+  const detailsUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(',')}&retmode=xml`;
+  const detailsResp = await fetchImpl(detailsUrl, { signal });
+  if (!detailsResp.ok) throw new Error(`HTTP ${detailsResp.status}`);
+  return parsePubMedDetailsXml(await detailsResp.text());
+}
+
+function truncateText(text, maxLength = 1200) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
 /**
  * PubMed 搜索 (免费, 无需 API Key)
  * 使用 NCBI E-utilities API
  */
-async function searchPubMed(query, maxResults = 8) {
+async function searchPubMed(query, maxResults = 8, options = {}) {
   const queryInfo = buildPubMedQuery(query);
+  const fetchImpl = options.fetchImpl || fetch;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10秒超时
   try {
     const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(queryInfo.pubmedQuery)}&retmax=${maxResults}&retmode=json&sort=date`;
-    const searchResp = await fetch(searchUrl, { signal: controller.signal });
+    const searchResp = await fetchImpl(searchUrl, { signal: controller.signal });
     if (!searchResp.ok) throw new Error(`HTTP ${searchResp.status}`);
     const searchData = await searchResp.json();
     const ids = searchData.esearchresult?.idlist;
     if (!ids || ids.length === 0) return { queryInfo, results: [] };
 
     const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`;
-    const summaryResp = await fetch(summaryUrl, { signal: controller.signal });
+    const summaryResp = await fetchImpl(summaryUrl, { signal: controller.signal });
     if (!summaryResp.ok) throw new Error(`HTTP ${summaryResp.status}`);
     const summaryData = await summaryResp.json();
+    let detailsById = {};
+    try {
+      detailsById = await fetchPubMedDetails(ids, {
+        fetchImpl,
+        signal: controller.signal
+      });
+    } catch (detailsError) {
+      console.warn('PubMed 摘要详情获取失败 (保留基础引文):', detailsError.message);
+    }
 
     const results = [];
     for (const id of ids) {
       const article = summaryData.result?.[id];
       if (!article || article.error) continue;
+      const details = detailsById[id] || {};
       results.push({
         pmid: id,
         title: article.title || '',
@@ -234,6 +322,8 @@ async function searchPubMed(query, maxResults = 8) {
         journal: article.fulljournalname || article.source || '',
         pubdate: article.pubdate || '',
         doi: (article.articleids || []).find(a => a.idtype === 'doi')?.value || '',
+        abstract: details.abstract || '',
+        publicationTypes: details.publicationTypes || [],
       });
     }
     return { queryInfo, results };
@@ -313,6 +403,8 @@ function formatSearchContext(pubmedResults, tavilyResults) {
       context += `   PMID: ${r.pmid} | PubMed: https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/`;
       if (r.doi) context += ` | DOI: https://doi.org/${r.doi}`;
       context += '\n';
+      if (r.publicationTypes?.length) context += `   文献类型: ${r.publicationTypes.join('; ')}\n`;
+      if (r.abstract) context += `   摘要: ${truncateText(r.abstract)}\n`;
     });
   } else if (queryInfo) {
     context += '\n\n📚 【PubMed 最新检索结果】\n未检索到可用 PubMed 结果；回答中必须明确说明证据不足，不得补造引用。\n';
