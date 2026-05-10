@@ -153,11 +153,37 @@ export function ChatArea() {
 - 默认使用中文，结构清晰，必要时使用表格。`
   }
 
-  const buildUserContent = (text: string) => {
+  const buildUserContent = async (text: string) => {
     if (!enableDoc || !pendingFile) return text
 
+    const query = text || '请分析这篇文档。'
+
+    if (window.electronAPI?.selectDocumentContext) {
+      const result = await window.electronAPI.selectDocumentContext({
+        name: pendingFile.name,
+        text: pendingFile.text,
+        query
+      })
+
+      if (result.mode === 'rag') {
+        return [
+          `[上传文档: ${pendingFile.name}]`,
+          `本地 RAG 已从 ${result.totalChunks} 个片段中选取 ${result.chunks.length} 个相关片段（原文 ${result.originalChars.toLocaleString()} 字符，入模 ${result.selectedChars.toLocaleString()} 字符）。`,
+          '',
+          '---',
+          '相关文档片段:',
+          result.context,
+          '---',
+          '',
+          query
+        ].join('\n')
+      }
+
+      return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${result.context}\n---\n\n${query}`
+    }
+
     const truncated = pendingFile.text.slice(0, 30000)
-    return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${truncated}\n---\n\n${text || '请分析这篇文档。'}`
+    return `[上传文档: ${pendingFile.name}]\n\n---\n文档内容:\n${truncated}\n---\n\n${query}`
   }
 
   const getSearchContext = async (query: string) => {
@@ -208,7 +234,7 @@ export function ChatArea() {
       })
     }
 
-    const userContent = buildUserContent(trimmedInput)
+    const userContent = await buildUserContent(trimmedInput)
 
     const userMsg: ChatMessage = {
       id: Math.random().toString(36).substring(2, 15),

@@ -9,6 +9,7 @@ const {
   extractSseDeltas,
   testChatConnection
 } = require('./src-main/api.js');
+const { buildDocumentContext } = require('./src-main/rag.js');
 
 const APP_TITLE = '神经外科 AI 科研助手';
 
@@ -155,6 +156,14 @@ ipcMain.handle('file:dialog', async () => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+});
+
+ipcMain.handle('rag:selectContext', (_, payload) => {
+  return buildDocumentContext({
+    name: payload?.name,
+    text: payload?.text,
+    query: payload?.query
+  });
 });
 
 // 大模型对话请求 (Task 2.1.2)

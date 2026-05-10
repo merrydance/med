@@ -187,15 +187,16 @@
   - [ ] 解析双栏医学论文不再发生文本错乱。
 
 ### [Task-5.2.1] 本地轻量化 RAG (文本切块与检索)
-- **Assignee**: (待认领)
-- **依赖任务**: Task-5.1.1
-- **涉及范围**: `main.js`
+- **Assignee**: Codex
+- **依赖任务**: Task-5.1.1（高级 PDF 解析未完成；当前先对已有纯文本抽取结果启用本地 RAG）
+- **涉及范围**: `main.js`, `src-main/rag.js`, `preload.js`, `frontend/src/components/ChatArea.tsx`
 - **Action**:
-  1. 引入 `wink-bm25` (或相似 JS 本地检索库)。
-  2. 实现长文本分块算法（按段落/换行符切分为 ~1000 字符 chunk，带 overlap）。
-  3. 提问时对 chunks 进行得分排序，提取 Top 5 拼接进 Prompt。
+  1. [x] 引入 `wink-bm25` 或相似 JS 本地检索算法。（当前采用零依赖 BM25-like scorer，避免增加打包体积和 native 风险）
+  2. [x] 实现长文本分块算法（按段落/换行符切分为 ~1000 字符 chunk，带 overlap）。
+  3. [x] 提问时对 chunks 进行得分排序，提取 Top 5 拼接进 Prompt。
 - **DoD**:
-  - [ ] 面对几百页的指南，依然能在有限 token 内精准找到用药剂量。
+  - [x] 已补充自动化测试覆盖长文本切块、中文/英文医学词检索、短文档全文模式和长文档 Top-K 片段模式。
+  - [ ] 仍需用真实几百页指南手测：在有限 token 内精准找到用药剂量。
 
 ### [Task-5.3.1] [前端] 多文件拖拽与 Meta 分析交互界面
 - **Assignee**: (待认领)

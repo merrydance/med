@@ -24,6 +24,7 @@ function mockElectronApi(overrides: Partial<ElectronAPI> = {}) {
     testConnection: vi.fn(),
     openFileDialog: vi.fn(),
     readFile: vi.fn(),
+    selectDocumentContext: vi.fn(),
     dbGetChats: vi.fn().mockResolvedValue([]),
     dbGetMessages: vi.fn().mockResolvedValue([]),
     dbCreateChat: vi.fn(),

@@ -16,6 +16,23 @@ export interface FileReadResult {
   pages: number;
 }
 
+export interface DocumentContextChunk {
+  index: number;
+  text: string;
+  start: number;
+  end: number;
+  score: number;
+}
+
+export interface DocumentContextResult {
+  mode: 'empty' | 'full' | 'rag';
+  context: string;
+  chunks: DocumentContextChunk[];
+  totalChunks: number;
+  originalChars: number;
+  selectedChars: number;
+}
+
 export interface DbChatRow {
   id: string;
   title: string;
@@ -53,6 +70,11 @@ export interface ElectronAPI {
   
   openFileDialog: () => Promise<string | null>;
   readFile: (path: string) => Promise<FileReadResult>;
+  selectDocumentContext: (payload: {
+    name: string;
+    text: string;
+    query: string;
+  }) => Promise<DocumentContextResult>;
 
   // Database CRUD
   dbGetChats: () => Promise<DbChatRow[]>;
